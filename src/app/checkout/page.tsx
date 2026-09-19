@@ -340,7 +340,7 @@ export default function CheckoutPage() {
               className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-zinc-100 hover:bg-zinc-200 text-zinc-900 font-bold text-xs transition-colors border border-zinc-200 cursor-pointer shadow-2xs group"
             >
               <ArrowLeft className="w-4 h-4 group-hover:-translate-x-0.5 transition-transform" />
-              <span>Seguir Comprando</span>
+              <span>Volver a la Tienda</span>
             </Link>
             <div className="border-l border-zinc-200 pl-3">
               <span className="text-[10px] font-mono uppercase tracking-wider text-zinc-400 block font-semibold">
@@ -354,13 +354,6 @@ export default function CheckoutPage() {
           </div>
 
           <div className="flex items-center gap-3">
-            <Link
-              href="/tienda"
-              className="hidden sm:inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white hover:bg-zinc-50 text-zinc-800 font-bold text-xs border border-zinc-200 transition-colors shadow-2xs"
-            >
-              <ShoppingBag className="w-3.5 h-3.5" />
-              <span>Ver Catálogo</span>
-            </Link>
             <div className="flex items-center gap-2 text-xs font-mono text-zinc-700 bg-zinc-50 px-3.5 py-2 rounded-xl border border-zinc-200">
               <Ticket className="w-4 h-4 text-zinc-900" />
               <span>Ticket: <strong className="text-black font-bold">{codigoOrden}</strong></span>
@@ -392,15 +385,6 @@ export default function CheckoutPage() {
                   <h2 className="text-xs font-bold uppercase tracking-wider text-zinc-950">
                     Artículos Seleccionados ({localItems.reduce((a, b) => a + b.cantidad, 0)})
                   </h2>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Link
-                    href="/tienda"
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-zinc-100 hover:bg-zinc-200 text-zinc-900 font-bold text-xs border border-zinc-200 transition-colors shadow-2xs"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    <span>Seguir Comprando</span>
-                  </Link>
                 </div>
               </div>
 
@@ -486,22 +470,6 @@ export default function CheckoutPage() {
                   })
                 )}
               </div>
-
-              {/* Pie de lista de productos con botón para seguir comprando */}
-              {localItems.length > 0 && (
-                <div className="pt-3 border-t border-zinc-100 flex flex-col sm:flex-row items-center justify-between gap-3">
-                  <span className="text-xs text-zinc-500">
-                    ¿Deseas agregar más tijeras, aceites o peines a tu pedido?
-                  </span>
-                  <Link
-                    href="/tienda"
-                    className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-zinc-100 hover:bg-zinc-200 text-black font-bold text-xs border border-zinc-300 transition-all shadow-2xs group cursor-pointer"
-                  >
-                    <ShoppingBag className="w-3.5 h-3.5 text-zinc-700 group-hover:scale-110 transition-transform" />
-                    <span>+ Seguir Comprando en la Tienda</span>
-                  </Link>
-                </div>
-              )}
             </motion.div>
 
             {/* SECCIÓN 2: Datos del Cliente que retira */}
@@ -1578,15 +1546,7 @@ export default function CheckoutPage() {
                   Al confirmar, tu ticket quedará registrado con el código <strong className="text-zinc-800 font-mono">{codigoOrden}</strong> y podrás presentarlo en tienda o enviarlo a WhatsApp.
                 </p>
 
-                <div data-ignore-pdf="true" className="pt-2 border-t border-zinc-100 text-center">
-                  <Link
-                    href="/tienda"
-                    className="inline-flex items-center gap-1.5 text-xs font-bold text-zinc-700 hover:text-black hover:underline transition-colors cursor-pointer"
-                  >
-                    <ArrowLeft className="w-3.5 h-3.5" />
-                    <span>Seguir Comprando en la Tienda</span>
-                  </Link>
-                </div>
+
 
               </div>
             </motion.div>

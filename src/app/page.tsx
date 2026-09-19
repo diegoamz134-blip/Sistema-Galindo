@@ -17,47 +17,6 @@ import { AcademyUrgencyBanner } from '@/components/home/AcademyUrgencyBanner';
 import { SedeCentralSection } from '@/components/home/SedeCentralSection';
 import { FaqAccordion } from '@/components/home/FaqAccordion';
 
-function AnimatedNumber({
-  value,
-  suffix = '',
-  duration = 1.8,
-  className = 'tabular-nums font-mono font-black text-3xl sm:text-4xl text-white drop-shadow-md',
-}: {
-  value: number;
-  suffix?: string;
-  duration?: number;
-  className?: string;
-}) {
-  const [displayValue, setDisplayValue] = useState(0);
-
-  useEffect(() => {
-    let startTimestamp: number | null = null;
-    let animFrame: number;
-
-    const step = (timestamp: number) => {
-      if (!startTimestamp) startTimestamp = timestamp;
-      const progress = Math.min((timestamp - startTimestamp) / (duration * 1000), 1);
-      // Easing out quart para una subida suave y fluida
-      const ease = 1 - Math.pow(1 - progress, 4);
-      setDisplayValue(Math.floor(ease * value));
-
-      if (progress < 1) {
-        animFrame = requestAnimationFrame(step);
-      } else {
-        setDisplayValue(value);
-      }
-    };
-
-    animFrame = requestAnimationFrame(step);
-    return () => cancelAnimationFrame(animFrame);
-  }, [value, duration]);
-
-  return (
-    <span className={className}>
-      {displayValue}{suffix}
-    </span>
-  );
-}
 
 export default function HomePage() {
   const {
@@ -145,52 +104,6 @@ export default function HomePage() {
                 </Link>
               </div>
 
-              {/* Indicadores numéricos animados con conteo ascendente */}
-              <div className="grid grid-cols-3 gap-6 pt-8 border-t border-white/20 max-w-lg">
-                <motion.div
-                  initial={{ opacity: 0, y: 15 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.5, delay: 0.15 }}
-                  className="space-y-1"
-                >
-                  <div className="flex items-baseline text-white">
-                    <AnimatedNumber value={500} suffix="+" duration={1.8} />
-                  </div>
-                  <p className="text-xs font-bold text-zinc-200 uppercase tracking-wider drop-shadow-sm">
-                    Egresados
-                  </p>
-                </motion.div>
-
-                <motion.div
-                  initial={{ opacity: 0, y: 15 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.5, delay: 0.3 }}
-                  className="space-y-1"
-                >
-                  <div className="flex items-baseline text-white">
-                    <AnimatedNumber value={100} suffix="%" duration={1.5} />
-                  </div>
-                  <p className="text-xs font-bold text-zinc-200 uppercase tracking-wider drop-shadow-sm">
-                    Práctica Real
-                  </p>
-                </motion.div>
-
-                <motion.div
-                  initial={{ opacity: 0, y: 15 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.5, delay: 0.45 }}
-                  className="space-y-1"
-                >
-                  <div className="flex items-baseline">
-                    <span className="font-mono font-black text-3xl sm:text-4xl text-white drop-shadow-md">
-                      Oficial
-                    </span>
-                  </div>
-                  <p className="text-xs font-bold text-zinc-200 uppercase tracking-wider drop-shadow-sm">
-                    Certificación
-                  </p>
-                </motion.div>
-              </div>
             </motion.div>
 
           </div>
@@ -200,7 +113,7 @@ export default function HomePage() {
 
 
       {/* 3. PRODUCTOS DESTACADOS - CARRUSEL INTERACTIVO */}
-      <section className="py-20 border-b border-zinc-200 bg-[#FAFAFA]">
+      <section className="py-20 border-b border-zinc-200 bg-white">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
           <FeaturedProductsCarousel
             productos={MOCK_PRODUCTOS}
@@ -211,7 +124,7 @@ export default function HomePage() {
       </section>
 
       {/* 4. PROGRAMAS ACADÉMICOS & FORMACIÓN PRÁCTICA */}
-      <section className="py-20 border-b border-zinc-200 bg-white">
+      <section className="py-24 border-y border-zinc-300/80 bg-[#F1F3F5]">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 space-y-12">
           
           {/* Cintillo de Urgencia & Vacantes del Próximo Ciclo */}
@@ -219,67 +132,75 @@ export default function HomePage() {
 
           <div>
             <div className="mb-12 max-w-xl">
-              <span className="text-xs font-mono uppercase tracking-widest text-zinc-500 block mb-1">
-                Capacitación Técnica
+              <span className="text-xs font-mono uppercase tracking-widest text-zinc-500 font-semibold block mb-1">
+                Capacitación Técnica Profesional
               </span>
-              <h2 className="text-2xl sm:text-3xl font-bold text-zinc-950 uppercase tracking-tight">
+              <h2 className="text-2xl sm:text-3xl font-black text-zinc-950 uppercase tracking-tight">
                 Cursos de Barbería en Ica
               </h2>
-              <p className="text-xs text-zinc-600 mt-2 leading-relaxed">
+              <p className="text-xs sm:text-sm text-zinc-600 mt-2 leading-relaxed">
                 Aprende desde los fundamentos básicos hasta técnicas avanzadas de desvanecido, tijera clásica y afeitado tradicional con modelos reales.
               </p>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {cursos.map((curso) => (
-                <div
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+              {cursos.map((curso, idx) => (
+                <motion.div
                   key={curso.id}
-                  className="rounded-xl bg-white border border-zinc-200 p-6 flex flex-col justify-between space-y-6 hover:border-zinc-300 transition-all shadow-sm"
+                  initial={{ opacity: 0, y: 20 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true }}
+                  transition={{ duration: 0.4, delay: idx * 0.1 }}
+                  whileHover={{ y: -8, transition: { duration: 0.25, ease: 'easeOut' } }}
+                  className="bg-white rounded-3xl p-8 sm:p-9 shadow-[0_8px_30px_rgb(0,0,0,0.06)] hover:shadow-[0_22px_45px_rgba(0,0,0,0.12)] border border-zinc-200/70 transition-shadow duration-300 flex flex-col justify-between space-y-6"
                 >
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between text-xs text-zinc-500 font-mono">
-                      <span>{curso.duracion_semanas} Semanas • {curso.horas_academicas} Horas</span>
-                      {curso.incluye_kit && (
-                        <span className="text-zinc-900 font-medium">Incluye Kit de Inicio</span>
-                      )}
+                  <div className="space-y-4">
+                    <div className="space-y-1.5">
+                      <p className="text-xs font-semibold uppercase tracking-wider text-zinc-400">
+                        {curso.duracion_semanas} Semanas • Clases Presenciales
+                      </p>
+                      <h3 className="text-2xl sm:text-3xl font-black text-zinc-900 tracking-tight">
+                        {curso.titulo}
+                      </h3>
                     </div>
 
-                    <h3 className="text-lg font-bold text-zinc-950">
-                      {curso.titulo}
-                    </h3>
-
-                    <p className="text-xs text-zinc-600 leading-relaxed">
+                    <p className="text-sm text-zinc-600 leading-relaxed">
                       {curso.descripcion_corta}
                     </p>
 
                     {curso.temario_detallado && (
-                      <ul className="pt-3 border-t border-zinc-100 space-y-1.5 text-xs text-zinc-700">
-                        {curso.temario_detallado.slice(0, 3).map((item, i) => (
-                          <li key={i} className="flex items-center gap-2">
-                            <span className="w-1.5 h-1.5 rounded-full bg-zinc-400 shrink-0" />
-                            <span className="truncate">{item}</span>
-                          </li>
-                        ))}
-                      </ul>
+                      <div className="pt-4 border-t border-zinc-100 space-y-3">
+                        <p className="text-xs font-bold uppercase tracking-wider text-zinc-400">
+                          Módulos Principales
+                        </p>
+                        <ul className="space-y-2.5">
+                          {curso.temario_detallado.slice(0, 3).map((item, i) => (
+                            <li key={i} className="flex items-center gap-3 text-xs sm:text-sm text-zinc-700 font-medium">
+                              <span className="w-1.5 h-1.5 rounded-full bg-zinc-900 shrink-0" />
+                              <span>{item}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
                     )}
                   </div>
 
-                  <div className="pt-4 border-t border-zinc-100 flex items-center justify-between">
+                  <div className="pt-6 border-t border-zinc-100 flex items-center justify-between">
                     <div>
-                      <span className="text-[10px] text-zinc-400 block">Matrícula</span>
-                      <span className="text-sm font-bold text-zinc-950 font-mono">
+                      <span className="text-[11px] font-medium text-zinc-400 block">Matrícula</span>
+                      <span className="text-2xl font-black text-zinc-950 font-mono">
                         {formatCurrency(curso.costo_matricula)}
                       </span>
                     </div>
 
                     <Link
                       href="/cursos"
-                      className="px-4 py-2 rounded-lg text-xs font-semibold bg-black text-white hover:bg-zinc-800 transition-colors"
+                      className="px-6 py-3 rounded-xl text-xs font-bold uppercase tracking-wider bg-zinc-900 hover:bg-black text-white shadow-md hover:shadow-xl transition-all duration-200 hover:scale-[1.03] active:scale-95"
                     >
                       Ver Temario Completo
                     </Link>
                   </div>
-                </div>
+                </motion.div>
               ))}
             </div>
           </div>

@@ -1,26 +1,13 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { MapPin, Clock, Navigation, MessageCircle, Armchair, ShoppingBag, ShieldCheck, Check } from 'lucide-react';
 import { SEDES, SedeId } from '@/lib/constants';
 
 export function SedeCentralSection() {
   const [activeSede, setActiveSede] = useState<SedeId>('ica');
-  const [isOpenNow, setIsOpenNow] = useState(true);
 
   const sede = SEDES[activeSede];
-
-  useEffect(() => {
-    // Calculamos si la sede está abierta según horario local (Lun-Sáb 9:00 a 20:00)
-    const now = new Date();
-    const day = now.getDay(); // 0 = Domingo, 1-6 = Lun-Sáb
-    const hour = now.getHours();
-
-    const isBusinessDay = day >= 1 && day <= 6;
-    const isBusinessHour = hour >= 9 && hour < 20;
-
-    setIsOpenNow(isBusinessDay && isBusinessHour);
-  }, []);
 
   const whatsappUrl = `https://wa.me/${sede.whatsapp}?text=${encodeURIComponent(
     `Hola Galindo Barber, deseo información sobre la ubicación y atención en la ${sede.nombre} (${sede.direccion}).`
@@ -38,22 +25,6 @@ export function SedeCentralSection() {
               <div className="flex items-center gap-2.5 flex-wrap">
                 <span className="text-xs font-mono uppercase tracking-widest text-zinc-500">
                   Infraestructura Presencial Multisede
-                </span>
-                
-                {/* Live Status indicator */}
-                <span
-                  className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-mono font-bold border ${
-                    isOpenNow
-                      ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                      : 'bg-zinc-100 text-zinc-600 border-zinc-200'
-                  }`}
-                >
-                  <span
-                    className={`w-2 h-2 rounded-full ${
-                      isOpenNow ? 'bg-emerald-500 animate-pulse' : 'bg-zinc-400'
-                    }`}
-                  />
-                  {isOpenNow ? 'Abierto Ahora (Hasta 8:00 PM)' : 'Cerrado Ahora (Abre 9:00 AM)'}
                 </span>
               </div>
 
