@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
-import { ShoppingBag, Menu, X } from 'lucide-react';
+import { ShoppingCart, Menu, X } from 'lucide-react';
 import { BUSINESS_INFO } from '@/lib/constants';
 import { useCart } from '@/context/CartContext';
 
@@ -114,7 +114,7 @@ export function Navbar({ cartItemCount, onOpenCart }: NavbarProps) {
               }`}
               aria-label="Abrir carrito de compras"
             >
-              <ShoppingBag className="w-4 h-4" />
+              <ShoppingCart className="w-4 h-4" />
               {count > 0 && (
                 <motion.span
                   key={count}

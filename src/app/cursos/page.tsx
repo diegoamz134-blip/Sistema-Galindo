@@ -1,57 +1,57 @@
 'use client';
-
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronDown, ChevronUp, Calendar, Clock, MapPin, Award, Check, Store, Users, ShoppingBag, MessageCircle } from 'lucide-react';
+import { ChevronDown, ChevronUp, Calendar, Clock, MapPin, Award, Check, Store, Users, ShoppingCart, MessageCircle, GraduationCap } from 'lucide-react';
 import { Navbar } from '@/components/layout/Navbar';
 import { Footer } from '@/components/layout/Footer';
 import { CartDrawer } from '@/components/shop/CartDrawer';
 import { useCart } from '@/context/CartContext';
 import { formatCurrency, generateWhatsAppLink } from '@/lib/utils';
 import { BUSINESS_INFO, TURNOS_CURSO_LABELS, SEDES, SedeId } from '@/lib/constants';
-import { MOCK_CURSOS } from '@/lib/mock-data';
-import { Producto } from '@/types/database';
-
-interface TurnoOption {
-  id: string;
-  nombre: string;
-  horario: string;
-  dias: string;
-  vacantesDisponibles: number;
-}
-
-const TURNOS_DISPONIBLES: TurnoOption[] = [
-  {
-    id: 'MANANA',
-    nombre: 'Turno Mañana',
-    horario: '9:00 AM — 12:00 PM',
-    dias: 'Lunes, Miércoles y Viernes',
-    vacantesDisponibles: 4,
-  },
-  {
-    id: 'TARDE',
-    nombre: 'Turno Tarde',
-    horario: '3:00 PM — 6:00 PM',
-    dias: 'Lunes, Miércoles y Viernes',
-    vacantesDisponibles: 6,
-  },
-  {
-    id: 'SABATINO',
-    nombre: 'Sábados Intensivo',
-    horario: '9:00 AM — 2:00 PM',
-    dias: 'Todos los Sábados',
-    vacantesDisponibles: 2,
-  },
-];
+import { Producto, Curso, TurnoOption } from '@/types/database';
+import { getCursosActivos, DEFAULT_TURNOS } from '@/lib/academia-service';
 
 export default function CursosPage() {
-  const cursos = MOCK_CURSOS;
-  const [cursoSeleccionadoId, setCursoSeleccionadoId] = useState<string>(cursos[0].id);
+  const [cursos, setCursos] = useState<Curso[]>([]);
+  const [cargando, setCargando] = useState(true);
+  const [cursoSeleccionadoId, setCursoSeleccionadoId] = useState<string>('');
   const [turnoSeleccionadoId, setTurnoSeleccionadoId] = useState<string>('MANANA');
   const [acordeonAbierto, setAcordeonAbierto] = useState<number | null>(0);
+  const [temarioPage, setTemarioPage] = useState<number>(1);
+
+  useEffect(() => {
+    let isMounted = true;
+    async function cargarCursos() {
+      try {
+        const list = await getCursosActivos();
+        if (isMounted) {
+          const items = list || [];
+          setCursos(items);
+          if (items.length > 0) {
+            setCursoSeleccionadoId((prev) => {
+              const existe = items.some((c) => c.id === prev);
+              return existe ? prev : items[0].id;
+            });
+          }
+        }
+      } catch (err) {
+        console.warn('Error al cargar cursos en /cursos:', err);
+      } finally {
+        if (isMounted) setCargando(false);
+      }
+    }
+    cargarCursos();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const cursoActivo = cursos.find((c) => c.id === cursoSeleccionadoId) || cursos[0];
-  const turnoActivo = TURNOS_DISPONIBLES.find((t) => t.id === turnoSeleccionadoId) || TURNOS_DISPONIBLES[0];
+  const turnosDisponibles: TurnoOption[] = cursoActivo?.turnos && cursoActivo.turnos.length > 0
+    ? cursoActivo.turnos
+    : DEFAULT_TURNOS;
+  const turnoActivo = turnosDisponibles.find((t) => t.id === turnoSeleccionadoId) || turnosDisponibles[0];
 
   const {
     cartItems,
@@ -68,6 +68,7 @@ export default function CursosPage() {
   const [agregadoAnim, setAgregadoAnim] = useState(false);
 
   const handleInscribirmeAlCarrito = (e?: React.MouseEvent) => {
+    if (!cursoActivo) return;
     const coords = e
       ? {
           x: e.clientX,
@@ -95,7 +96,16 @@ export default function CursosPage() {
       actualizado_en: new Date().toISOString(),
     };
 
-    addToCart(cursoProducto, false, coords);
+    const matriculaMeta = {
+      cursoId: cursoActivo.id,
+      cursoNombre: cursoActivo.titulo,
+      turno: (turnoActivo.id as 'MANANA' | 'TARDE' | 'NOCHE' | 'SABATINO') || 'MANANA',
+      sede: sedeActual.nombre,
+      costoMatricula: cursoActivo.costo_matricula,
+      totalCurso: cursoActivo.costo_total_contado || cursoActivo.costo_matricula * 3,
+    };
+
+    addToCart(cursoProducto, false, coords, matriculaMeta, 'matricula');
     setAgregadoAnim(true);
     setTimeout(() => {
       setAgregadoAnim(false);
@@ -103,6 +113,7 @@ export default function CursosPage() {
   };
 
   const handleInscripcionWhatsApp = () => {
+    if (!cursoActivo) return;
     let mensaje = `Hola Galindo Barber Academy (${sedeActual.nombre}).\nDeseo información y separar mi vacante para el curso:\n\n`;
     mensaje += `CURSO: ${cursoActivo.titulo}\n`;
     mensaje += `TURNO: ${turnoActivo.nombre} (${turnoActivo.horario} - ${turnoActivo.dias})\n`;
@@ -136,62 +147,109 @@ export default function CursosPage() {
       </section>
 
       {/* Selector de Cursos y Módulo Interactivo */}
-      <section className="py-12 max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 flex-1 w-full space-y-12">
-        
-        {/* Selector de Pestañas de Cursos */}
-        <div className="flex border-b border-zinc-200 overflow-x-auto gap-2">
-          {cursos.map((c) => {
-            const activo = c.id === cursoSeleccionadoId;
-            return (
-              <button
-                key={c.id}
-                onClick={() => setCursoSeleccionadoId(c.id)}
-                className={`pb-4 px-4 text-xs font-bold uppercase tracking-wider transition-colors border-b-2 whitespace-nowrap ${
-                  activo
-                    ? 'border-black text-zinc-950'
-                    : 'border-transparent text-zinc-400 hover:text-zinc-700'
-                }`}
-              >
-                {c.titulo}
-              </button>
-            );
-          })}
-        </div>
-
-        {/* Ficha Detallada del Curso Seleccionado */}
-        <div className="rounded-2xl bg-white border border-zinc-200 overflow-hidden shadow-sm grid grid-cols-1 lg:grid-cols-12 gap-8 p-6 sm:p-8">
-          
-          {/* Columna Izquierda: Imagen y Datos Básicos */}
-          <div className="lg:col-span-5 space-y-5">
-            <div className="aspect-[4/3] rounded-xl overflow-hidden bg-zinc-100 border border-zinc-200 shadow-sm relative">
-              <img
-                src={cursoActivo.imagen_url}
-                alt={cursoActivo.titulo}
-                className="w-full h-full object-cover"
-              />
-              <div className="absolute top-3 left-3 bg-white/95 backdrop-blur-md px-2.5 py-1 rounded text-zinc-900 text-[11px] font-mono border border-zinc-200 shadow-sm">
-                {cursoActivo.duracion_semanas} Semanas • {cursoActivo.horas_academicas} Horas
-              </div>
+      <section className="py-12 max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 flex-1 w-full">
+        {cargando ? (
+          <div className="py-24 text-center text-zinc-400">
+            <div className="w-8 h-8 border-2 border-black border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+            <p className="text-xs font-semibold text-zinc-600">Consultando convocatorias disponibles...</p>
+          </div>
+        ) : cursos.length === 0 ? (
+          <div className="max-w-xl mx-auto py-16 px-6 text-center rounded-3xl bg-zinc-50 border border-zinc-200 shadow-xs space-y-4 my-8">
+            <div className="w-14 h-14 rounded-full bg-white text-zinc-600 flex items-center justify-center mx-auto shadow-xs border border-zinc-200">
+              <GraduationCap className="w-7 h-7 text-zinc-700" />
             </div>
-
-            <div className="p-4 rounded-xl bg-zinc-50 border border-zinc-200 space-y-2.5 text-xs text-zinc-600">
-              <div className="flex items-center gap-2 text-zinc-950 font-semibold">
-                <Store className="w-4 h-4 text-zinc-900" />
-                <span>Clases Presenciales — {sedeActual.nombre}</span>
-              </div>
-              <p className="text-[11px] leading-relaxed">
-                Estaciones de trabajo individuales con espejos, tomas eléctricas para máquinas y modelos reales provistos por la escuela en {sedeActual.direccion}.
+            <div>
+              <h3 className="text-lg font-black text-zinc-950 uppercase tracking-tight">
+                Próximamente Nuevas Convocatorias
+              </h3>
+              <p className="text-xs text-zinc-600 leading-relaxed mt-1">
+                Por el momento no hay cursos con inscripciones abiertas en la plataforma web. Estamos preparando las nuevas fechas y vacantes para el próximo ciclo en nuestras sedes de Ica y Huancayo.
               </p>
-              {cursoActivo.incluye_kit && (
-                <div className="pt-2 border-t border-zinc-200 text-zinc-950 font-medium">
-                  ★ {cursoActivo.descripcion_kit || 'Incluye Kit Oficial de Alumno Galindo'}
-                </div>
-              )}
+            </div>
+            <div className="pt-2 flex flex-col sm:flex-row items-center justify-center gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  const link = generateWhatsAppLink(
+                    sedeActual.whatsapp,
+                    `Hola Galindo Barber Academy (${sedeActual.nombre}). Quisiera saber cuándo inician las próximas convocatorias y cursos de barbería.`
+                  );
+                  window.open(link, '_blank');
+                }}
+                className="w-full sm:w-auto px-6 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs uppercase tracking-wider transition-all shadow-xs flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <MessageCircle className="w-4 h-4" />
+                <span>Consultar por WhatsApp</span>
+              </button>
+              <Link
+                href="/tienda"
+                className="w-full sm:w-auto px-6 py-3 rounded-xl bg-black hover:bg-zinc-800 text-white font-bold text-xs uppercase tracking-wider transition-all shadow-xs flex items-center justify-center gap-2"
+              >
+                <Store className="w-4 h-4" />
+                <span>Ver Tienda Supply</span>
+              </Link>
             </div>
           </div>
+        ) : cursoActivo ? (
+          <div className="space-y-12">
+            {/* Selector de Pestañas de Cursos */}
+            <div className="flex border-b border-zinc-200 overflow-x-auto gap-2">
+              {cursos.map((c) => {
+                const activo = c.id === cursoSeleccionadoId;
+                return (
+                  <button
+                    key={c.id}
+                    onClick={() => {
+                      setCursoSeleccionadoId(c.id);
+                      setTemarioPage(1);
+                      setAcordeonAbierto(0);
+                    }}
+                    className={`pb-4 px-4 text-xs font-bold uppercase tracking-wider transition-colors border-b-2 whitespace-nowrap ${
+                      activo
+                        ? 'border-black text-zinc-950'
+                        : 'border-transparent text-zinc-400 hover:text-zinc-700'
+                    }`}
+                  >
+                    {c.titulo}
+                  </button>
+                );
+              })}
+            </div>
 
-          {/* Columna Derecha: Temario Desplegable y Calculadora */}
-          <div className="lg:col-span-7 flex flex-col justify-between space-y-6">
+            {/* Ficha Detallada del Curso Seleccionado */}
+            <div className="rounded-2xl bg-white border border-zinc-200 overflow-hidden shadow-sm grid grid-cols-1 lg:grid-cols-12 gap-8 p-6 sm:p-8">
+              
+              {/* Columna Izquierda: Imagen y Datos Básicos */}
+              <div className="lg:col-span-5 space-y-5">
+                <div className="aspect-[4/3] rounded-xl overflow-hidden bg-zinc-100 border border-zinc-200 shadow-sm relative">
+                  <img
+                    src={cursoActivo.imagen_url}
+                    alt={cursoActivo.titulo}
+                    className="w-full h-full object-cover"
+                  />
+                  <div className="absolute top-3 left-3 bg-white/95 backdrop-blur-md px-2.5 py-1 rounded text-zinc-900 text-[11px] font-mono border border-zinc-200 shadow-sm">
+                    {cursoActivo.duracion_semanas} Semanas • {cursoActivo.horas_academicas} Horas
+                  </div>
+                </div>
+
+                <div className="p-4 rounded-xl bg-zinc-50 border border-zinc-200 space-y-2.5 text-xs text-zinc-600">
+                  <div className="flex items-center gap-2 text-zinc-950 font-semibold">
+                    <Store className="w-4 h-4 text-zinc-900" />
+                    <span>Clases Presenciales — {sedeActual.nombre}</span>
+                  </div>
+                  <p className="text-[11px] leading-relaxed">
+                    Estaciones de trabajo individuales con espejos, tomas eléctricas para máquinas y modelos reales provistos por la escuela en {sedeActual.direccion}.
+                  </p>
+                  {cursoActivo.incluye_kit && (
+                    <div className="pt-2 border-t border-zinc-200 text-zinc-950 font-medium">
+                      ★ {cursoActivo.descripcion_kit || 'Incluye Kit Oficial de Alumno Galindo'}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Columna Derecha: Temario Desplegable y Calculadora */}
+              <div className="lg:col-span-7 flex flex-col justify-between space-y-6">
             <div>
               <div className="flex items-center justify-between">
                 <span className="text-xs font-mono uppercase tracking-wider text-zinc-400">
@@ -213,23 +271,33 @@ export default function CursosPage() {
               {/* Temario Acordeón Interactivo */}
               {cursoActivo.temario_detallado && (
                 <div className="mt-6 space-y-2">
-                  <span className="text-[11px] font-mono uppercase tracking-wider text-zinc-400 block mb-2">
-                    Módulos Académicos
-                  </span>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-[11px] font-mono uppercase tracking-wider text-zinc-400 block">
+                      Módulos Académicos
+                    </span>
+                    {cursoActivo.temario_detallado.length > 10 && (
+                      <span className="text-[10px] font-mono font-bold text-zinc-500 bg-zinc-100 px-2 py-0.5 rounded-md">
+                        Página {temarioPage} de {Math.ceil(cursoActivo.temario_detallado.length / 10)}
+                      </span>
+                    )}
+                  </div>
 
                   <div className="divide-y divide-zinc-100 border border-zinc-200 rounded-xl overflow-hidden bg-zinc-50/50">
-                    {cursoActivo.temario_detallado.map((tema, idx) => {
-                      const abierto = acordeonAbierto === idx;
+                    {cursoActivo.temario_detallado
+                      .slice((temarioPage - 1) * 10, temarioPage * 10)
+                      .map((tema, idx) => {
+                      const realIndex = (temarioPage - 1) * 10 + idx;
+                      const abierto = acordeonAbierto === realIndex;
                       return (
-                        <div key={idx} className="bg-white">
+                        <div key={realIndex} className="bg-white">
                           <button
                             type="button"
-                            onClick={() => setAcordeonAbierto(abierto ? null : idx)}
+                            onClick={() => setAcordeonAbierto(abierto ? null : realIndex)}
                             className="w-full p-3.5 text-left flex items-center justify-between hover:bg-zinc-50 transition-colors"
                           >
                             <span className="text-xs font-semibold text-zinc-900 flex items-center gap-2">
                               <span className="w-5 h-5 rounded-full bg-zinc-100 text-zinc-700 text-[10px] font-mono flex items-center justify-center shrink-0 border border-zinc-200">
-                                {idx + 1}
+                                {realIndex + 1}
                               </span>
                               {tema}
                             </span>
@@ -257,6 +325,46 @@ export default function CursosPage() {
                       );
                     })}
                   </div>
+                  
+                  {/* Paginación */}
+                  {cursoActivo.temario_detallado.length > 10 && (
+                    <div className="flex items-center justify-between pt-3">
+                      <button
+                        type="button"
+                        onClick={() => setTemarioPage((prev) => Math.max(1, prev - 1))}
+                        disabled={temarioPage === 1}
+                        className="px-3 py-1.5 rounded-lg text-xs font-semibold text-zinc-700 border border-zinc-200 bg-white hover:bg-zinc-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                      >
+                        Anteriores
+                      </button>
+                      
+                      <div className="flex gap-1.5">
+                        {Array.from({ length: Math.ceil(cursoActivo.temario_detallado.length / 10) }).map((_, i) => (
+                          <button
+                            key={i}
+                            type="button"
+                            onClick={() => setTemarioPage(i + 1)}
+                            className={`w-6 h-6 rounded-md text-[10px] font-mono font-bold flex items-center justify-center transition-all ${
+                              temarioPage === i + 1
+                                ? 'bg-black text-white'
+                                : 'bg-zinc-100 text-zinc-500 hover:bg-zinc-200'
+                            }`}
+                          >
+                            {i + 1}
+                          </button>
+                        ))}
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => setTemarioPage((prev) => Math.min(Math.ceil(cursoActivo.temario_detallado.length / 10), prev + 1))}
+                        disabled={temarioPage === Math.ceil(cursoActivo.temario_detallado.length / 10)}
+                        className="px-3 py-1.5 rounded-lg text-xs font-semibold text-zinc-700 border border-zinc-200 bg-white hover:bg-zinc-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                      >
+                        Siguientes
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -268,14 +376,14 @@ export default function CursosPage() {
               </span>
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-                {TURNOS_DISPONIBLES.map((t) => {
-                  const seleccionado = t.id === turnoSeleccionadoId;
+                {turnosDisponibles.map((t) => {
+                  const seleccionado = t.id === turnoActivo?.id;
                   return (
                     <button
                       key={t.id}
                       type="button"
                       onClick={() => setTurnoSeleccionadoId(t.id)}
-                      className={`p-3 rounded-xl border text-left transition-all ${
+                      className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
                         seleccionado
                           ? 'border-black bg-zinc-950 text-white shadow-sm'
                           : 'border-zinc-200 bg-white text-zinc-800 hover:border-zinc-300'
@@ -285,9 +393,14 @@ export default function CursosPage() {
                       <p className={`text-[10px] mt-1 ${seleccionado ? 'text-zinc-300' : 'text-zinc-500'}`}>
                         {t.horario}
                       </p>
+                      {t.dias && (
+                        <p className={`text-[9px] mt-0.5 ${seleccionado ? 'text-zinc-400' : 'text-zinc-400'}`}>
+                          {t.dias}
+                        </p>
+                      )}
                       <div className="mt-2 pt-2 border-t border-zinc-200/40 flex items-center justify-between text-[10px] font-mono">
                         <span className={seleccionado ? 'text-zinc-300' : 'text-zinc-500'}>Vacantes:</span>
-                        <span className={`font-bold ${seleccionado ? 'text-white' : 'text-zinc-950'}`}>
+                        <span className={`font-bold ${seleccionado ? 'text-emerald-400' : 'text-zinc-950'}`}>
                           {t.vacantesDisponibles} libres
                         </span>
                       </div>
@@ -370,7 +483,7 @@ export default function CursosPage() {
                     </>
                   ) : (
                     <>
-                      <ShoppingBag className="w-4 h-4" />
+                      <ShoppingCart className="w-4 h-4" />
                       <span>Inscribirme en {turnoActivo.nombre}</span>
                     </>
                   )}
@@ -390,6 +503,8 @@ export default function CursosPage() {
 
           </div>
         </div>
+      </div>
+    ) : null}
 
       </section>
 

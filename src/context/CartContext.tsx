@@ -8,6 +8,15 @@ export interface CartItem {
   producto: Producto;
   cantidad: number;
   esPrecioAlumno?: boolean;
+  tipo?: 'producto' | 'matricula';
+  matriculaMetadata?: {
+    cursoId: string;
+    cursoNombre: string;
+    turno: 'MANANA' | 'TARDE' | 'NOCHE' | 'SABATINO';
+    sede: string;
+    costoMatricula: number;
+    totalCurso: number;
+  };
 }
 
 export interface FlyingItem {
@@ -30,7 +39,13 @@ export interface ToastData {
 
 interface CartContextType {
   cartItems: CartItem[];
-  addToCart: (producto: Producto, esAlumno?: boolean, originCoords?: { x: number; y: number }) => void;
+  addToCart: (
+    producto: Producto,
+    esAlumno?: boolean,
+    originCoords?: { x: number; y: number },
+    matriculaMetadata?: CartItem['matriculaMetadata'],
+    tipo?: 'producto' | 'matricula'
+  ) => void;
   updateQuantity: (productoId: string, delta: number) => void;
   removeFromCart: (productoId: string) => void;
   clearCart: () => void;
@@ -134,7 +149,9 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   const addToCart = (
     producto: Producto,
     _esAlumno?: boolean,
-    originCoords?: { x: number; y: number }
+    originCoords?: { x: number; y: number },
+    matriculaMetadata?: CartItem['matriculaMetadata'],
+    tipo?: 'producto' | 'matricula'
   ) => {
     setCartItems((prev) => {
       const existing = prev.find((item) => item.producto.id === producto.id);
@@ -145,7 +162,15 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
             : item
         );
       }
-      return [...prev, { producto, cantidad: 1 }];
+      return [
+        ...prev,
+        {
+          producto,
+          cantidad: 1,
+          tipo: tipo || (matriculaMetadata ? 'matricula' : 'producto'),
+          matriculaMetadata,
+        },
+      ];
     });
 
     // Iniciar animación Fly-To-Cart si estamos en el navegador

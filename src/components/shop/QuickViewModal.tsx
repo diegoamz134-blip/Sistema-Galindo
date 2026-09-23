@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, ShoppingBag, Store, Check, Shield } from 'lucide-react';
+import { X, ShoppingCart, Store, Check, Shield, Boxes } from 'lucide-react';
 import { Producto } from '@/types/database';
 import { formatCurrency } from '@/lib/utils';
 
@@ -53,12 +53,19 @@ export function QuickViewModal({
           <div className="grid grid-cols-1 md:grid-cols-2">
             {/* Imagen Principal */}
             <div className="bg-zinc-100 p-8 flex items-center justify-center border-b md:border-b-0 md:border-r border-zinc-200">
-              <div className="relative aspect-square w-full max-w-xs rounded-xl overflow-hidden bg-white border border-zinc-200 shadow-sm">
-                <img
-                  src={producto.imagenes[0]}
-                  alt={producto.nombre}
-                  className="w-full h-full object-cover"
-                />
+              <div className="relative aspect-square w-full max-w-xs rounded-xl overflow-hidden bg-white border border-zinc-200 shadow-sm flex items-center justify-center">
+                {producto.imagenes && producto.imagenes.length > 0 ? (
+                  <img
+                    src={producto.imagenes[0]}
+                    alt={producto.nombre}
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <div className="flex flex-col items-center justify-center text-zinc-400 gap-1.5 opacity-60">
+                    <Boxes className="w-8 h-8" />
+                    <span className="text-[10px] font-mono uppercase tracking-widest">Sin Foto</span>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -122,7 +129,7 @@ export function QuickViewModal({
                   }}
                   className="w-full py-3 rounded-xl font-semibold text-xs bg-black text-white hover:bg-zinc-800 transition-colors uppercase tracking-wider flex items-center justify-center gap-2 shadow-sm cursor-pointer active:scale-95"
                 >
-                  <ShoppingBag className="w-4 h-4" />
+                  <ShoppingCart className="w-4 h-4" />
                   <span>Añadir al Pedido</span>
                 </button>
               </div>

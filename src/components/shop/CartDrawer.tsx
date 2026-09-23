@@ -3,15 +3,12 @@
 import React from 'react';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ShoppingBag, X, Plus, Minus, Trash2, ArrowRight, ArrowLeft, Ticket } from 'lucide-react';
+import { ShoppingCart, X, Plus, Minus, Trash2, ArrowRight, ArrowLeft, Ticket, Boxes } from 'lucide-react';
 import { Producto } from '@/types/database';
 import { formatCurrency } from '@/lib/utils';
 
-export interface CartItem {
-  producto: Producto;
-  cantidad: number;
-  esPrecioAlumno?: boolean;
-}
+import { CartItem } from '@/context/CartContext';
+export type { CartItem };
 
 interface CartDrawerProps {
   isOpen: boolean;
@@ -63,7 +60,7 @@ export function CartDrawer({
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2.5">
                     <div className="p-2 rounded-lg bg-zinc-100 text-zinc-900 border border-zinc-200">
-                      <ShoppingBag className="w-4 h-4" />
+                      <ShoppingCart className="w-4 h-4" />
                     </div>
                     <div>
                       <h3 className="text-sm font-bold text-zinc-950 uppercase tracking-wider">
@@ -91,10 +88,10 @@ export function CartDrawer({
                 {items.length === 0 ? (
                   <div className="text-center py-16 space-y-3">
                     <div className="w-12 h-12 rounded-full bg-zinc-100 text-zinc-400 flex items-center justify-center mx-auto border border-zinc-200">
-                      <ShoppingBag className="w-5 h-5" />
+                      <ShoppingCart className="w-5 h-5" />
                     </div>
                     <p className="text-sm font-semibold text-zinc-900">
-                      Tu bolsa de compra está vacía
+                      Tu carrito de compras está vacío
                     </p>
                     <p className="text-xs text-zinc-500 max-w-xs mx-auto">
                       Explora nuestro catálogo de máquinas, tijeras y kits oficiales para empezar tu pedido.
@@ -114,12 +111,16 @@ export function CartDrawer({
                         className="p-3 sm:p-3.5 rounded-2xl bg-zinc-50 border border-zinc-200/90 flex items-start gap-3 shadow-xs"
                       >
                         {/* Imagen del producto */}
-                        <div className="w-16 h-16 rounded-xl bg-white overflow-hidden shrink-0 border border-zinc-200 shadow-xs">
-                          <img
-                            src={item.producto.imagenes[0]}
-                            alt={item.producto.nombre}
-                            className="w-full h-full object-cover"
-                          />
+                        <div className="w-16 h-16 rounded-xl bg-white overflow-hidden shrink-0 border border-zinc-200 shadow-xs flex items-center justify-center">
+                          {item.producto.imagenes && item.producto.imagenes.length > 0 ? (
+                            <img
+                              src={item.producto.imagenes[0]}
+                              alt={item.producto.nombre}
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            <Boxes className="w-6 h-6 text-zinc-400 opacity-60" />
+                          )}
                         </div>
 
                         {/* Detalles del producto y controles */}

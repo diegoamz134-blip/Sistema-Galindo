@@ -1,15 +1,17 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { formatCurrency, formatDateTime } from '@/lib/utils';
 import { MOCK_CAJA_ACTUAL, MOCK_MOVIMIENTOS_CAJA } from '@/lib/mock-data';
-import { MovimientoCaja, MetodoPago, TipoMovimientoCaja } from '@/types/database';
+import { MovimientoCaja, MetodoPago, TipoMovimientoCaja, CajaChica } from '@/types/database';
+import { supabase } from '@/lib/supabase';
 
 export default function CajaChicaPage() {
-  const [caja, setCaja] = useState(MOCK_CAJA_ACTUAL);
+  const [caja, setCaja] = useState<CajaChica>(MOCK_CAJA_ACTUAL);
   const [movimientos, setMovimientos] = useState<MovimientoCaja[]>(MOCK_MOVIMIENTOS_CAJA);
   const [showModalGasto, setShowModalGasto] = useState(false);
   const [showModalCierre, setShowModalCierre] = useState(false);
+  const [guardando, setGuardando] = useState(false);
 
   // Formulario nuevo movimiento
   const [nuevoConcepto, setNuevoConcepto] = useState('');
@@ -20,81 +22,180 @@ export default function CajaChicaPage() {
   // Arqueo de cierre
   const [efectivoContado, setEfectivoContado] = useState('');
 
-  const handleRegistrarMovimiento = (e: React.FormEvent) => {
+  // Cargar datos de caja desde Supabase
+  const cargarCajaDatos = useCallback(async () => {
+    try {
+      const [cajaRes, movsRes] = await Promise.all([
+        supabase
+          .from('cajas_chicas')
+          .select('*')
+          .eq('estado', 'ABIERTA')
+          .order('fecha_apertura', { ascending: false })
+          .limit(1),
+        supabase
+          .from('movimientos_caja')
+          .select('*')
+          .order('fecha', { ascending: false })
+          .limit(50),
+      ]);
+
+      if (cajaRes.data && cajaRes.data.length > 0) {
+        setCaja(cajaRes.data[0] as CajaChica);
+      }
+
+      if (movsRes.data && movsRes.data.length > 0) {
+        setMovimientos(movsRes.data as MovimientoCaja[]);
+      }
+    } catch (err) {
+      console.warn('Usando datos de respaldo para caja chica:', err);
+    }
+  }, []);
+
+  useEffect(() => {
+    cargarCajaDatos();
+
+    const channel = supabase
+      .channel('realtime_caja_admin')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'cajas_chicas' }, () => cargarCajaDatos())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'movimientos_caja' }, () => cargarCajaDatos())
+      .subscribe();
+
+    const onFocus = () => cargarCajaDatos();
+    window.addEventListener('focus', onFocus);
+    window.addEventListener('galindo_pos_venta_realizada', onFocus);
+    window.addEventListener('galindo_pedido_web_realizado', onFocus);
+
+    return () => {
+      supabase.removeChannel(channel);
+      window.removeEventListener('focus', onFocus);
+      window.removeEventListener('galindo_pos_venta_realizada', onFocus);
+      window.removeEventListener('galindo_pedido_web_realizado', onFocus);
+    };
+  }, [cargarCajaDatos]);
+
+  const handleRegistrarMovimiento = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!nuevoConcepto || !nuevoMonto) return;
 
     const montoNum = parseFloat(nuevoMonto);
     const esIngreso = nuevoTipo.startsWith('INGRESO');
+    setGuardando(true);
 
-    const nuevoMov: MovimientoCaja = {
-      id: `mov-${Date.now()}`,
-      caja_id: caja.id,
-      tipo: nuevoTipo,
-      monto: montoNum,
-      metodo_pago: nuevoMetodo,
-      concepto: nuevoConcepto,
-      usuario_id: 'usr-admin',
-      usuario_nombre: 'Diego Galindo',
-      fecha: new Date().toISOString(),
-    };
+    try {
+      const nuevoMov: MovimientoCaja = {
+        id: `mov-${Date.now()}`,
+        caja_id: caja.id,
+        tipo: nuevoTipo,
+        monto: montoNum,
+        metodo_pago: nuevoMetodo,
+        concepto: nuevoConcepto,
+        usuario_id: 'usr-admin',
+        usuario_nombre: 'Diego Galindo',
+        fecha: new Date().toISOString(),
+      };
 
-    setMovimientos([nuevoMov, ...movimientos]);
+      setMovimientos([nuevoMov, ...movimientos]);
 
-    if (nuevoMetodo === 'EFECTIVO') {
-      setCaja((prev) => ({
-        ...prev,
-        total_ingresos_efectivo: esIngreso
-          ? prev.total_ingresos_efectivo + montoNum
-          : prev.total_ingresos_efectivo,
-        total_egresos_efectivo: !esIngreso
-          ? prev.total_egresos_efectivo + montoNum
-          : prev.total_egresos_efectivo,
-        saldo_teorico_efectivo: esIngreso
-          ? prev.saldo_teorico_efectivo + montoNum
-          : prev.saldo_teorico_efectivo - montoNum,
-      }));
-    } else if (nuevoMetodo === 'MIXTO') {
-      const mitad = montoNum / 2;
-      setCaja((prev) => ({
-        ...prev,
-        total_ingresos_efectivo: esIngreso
-          ? prev.total_ingresos_efectivo + mitad
-          : prev.total_ingresos_efectivo,
-        saldo_teorico_efectivo: esIngreso
-          ? prev.saldo_teorico_efectivo + mitad
-          : prev.saldo_teorico_efectivo - mitad,
-        total_ingresos_digital: esIngreso
-          ? prev.total_ingresos_digital + mitad
-          : prev.total_ingresos_digital,
-      }));
-    } else {
-      if (esIngreso) {
-        setCaja((prev) => ({
-          ...prev,
-          total_ingresos_digital: prev.total_ingresos_digital + montoNum,
-        }));
+      // Guardar en Supabase
+      await supabase.from('movimientos_caja').insert({
+        caja_id: caja.id.startsWith('caja-') ? null : caja.id,
+        tipo: nuevoTipo,
+        monto: montoNum,
+        metodo_pago: nuevoMetodo,
+        concepto: nuevoConcepto,
+        usuario_id: '00000000-0000-0000-0000-000000000001',
+        usuario_nombre: 'Diego Galindo',
+      });
+
+      let incEfectivo = 0;
+      let incDigital = 0;
+      let egresoEfectivo = 0;
+
+      if (nuevoMetodo === 'EFECTIVO') {
+        if (esIngreso) incEfectivo = montoNum;
+        else egresoEfectivo = montoNum;
+      } else if (nuevoMetodo === 'MIXTO') {
+        const mitad = montoNum / 2;
+        if (esIngreso) {
+          incEfectivo = mitad;
+          incDigital = mitad;
+        } else {
+          egresoEfectivo = mitad;
+        }
+      } else {
+        if (esIngreso) incDigital = montoNum;
       }
-    }
 
-    setNuevoConcepto('');
-    setNuevoMonto('');
-    setShowModalGasto(false);
+      const nuevoTotalIngEfectivo = Number(caja.total_ingresos_efectivo || 0) + incEfectivo;
+      const nuevoTotalEgrEfectivo = Number(caja.total_egresos_efectivo || 0) + egresoEfectivo;
+      const nuevoSaldoEfectivo =
+        Number(caja.saldo_teorico_efectivo || 0) + incEfectivo - egresoEfectivo;
+      const nuevoTotalDigital = Number(caja.total_ingresos_digital || 0) + incDigital;
+
+      setCaja((prev) => ({
+        ...prev,
+        total_ingresos_efectivo: nuevoTotalIngEfectivo,
+        total_egresos_efectivo: nuevoTotalEgrEfectivo,
+        saldo_teorico_efectivo: nuevoSaldoEfectivo,
+        total_ingresos_digital: nuevoTotalDigital,
+      }));
+
+      if (!caja.id.startsWith('caja-')) {
+        await supabase
+          .from('cajas_chicas')
+          .update({
+            total_ingresos_efectivo: nuevoTotalIngEfectivo,
+            total_egresos_efectivo: nuevoTotalEgrEfectivo,
+            saldo_teorico_efectivo: nuevoSaldoEfectivo,
+            total_ingresos_digital: nuevoTotalDigital,
+          })
+          .eq('id', caja.id);
+      }
+
+      setNuevoConcepto('');
+      setNuevoMonto('');
+      setShowModalGasto(false);
+    } catch (err) {
+      console.error('Error al registrar movimiento:', err);
+    } finally {
+      setGuardando(false);
+    }
   };
 
-  const handleCerrarCaja = (e: React.FormEvent) => {
+  const handleCerrarCaja = async (e: React.FormEvent) => {
     e.preventDefault();
     const realNum = parseFloat(efectivoContado);
     const dif = realNum - caja.saldo_teorico_efectivo;
+    setGuardando(true);
 
-    setCaja((prev) => ({
-      ...prev,
-      estado: 'CERRADA',
-      fecha_cierre: new Date().toISOString(),
-      saldo_real_efectivo: realNum,
-      diferencia: dif,
-    }));
-    setShowModalCierre(false);
+    try {
+      const fechaCierre = new Date().toISOString();
+      setCaja((prev) => ({
+        ...prev,
+        estado: 'CERRADA',
+        fecha_cierre: fechaCierre,
+        saldo_real_efectivo: realNum,
+        diferencia: dif,
+      }));
+
+      if (!caja.id.startsWith('caja-')) {
+        await supabase
+          .from('cajas_chicas')
+          .update({
+            estado: 'CERRADA',
+            fecha_cierre: fechaCierre,
+            saldo_real_efectivo: realNum,
+            diferencia: dif,
+          })
+          .eq('id', caja.id);
+      }
+
+      setShowModalCierre(false);
+    } catch (err) {
+      console.error('Error al cerrar caja:', err);
+    } finally {
+      setGuardando(false);
+    }
   };
 
   return (

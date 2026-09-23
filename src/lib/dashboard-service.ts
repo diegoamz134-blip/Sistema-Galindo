@@ -477,3 +477,61 @@ export async function getActiveStudents(): Promise<Matricula[]> {
 
   return [];
 }
+
+// -------------------------------------------------------------------------
+// 7. Obtener Pedidos Web y POS Recientes para Gestión Operativa
+// -------------------------------------------------------------------------
+export interface PedidoReciente {
+  id: string;
+  codigo_pedido: string;
+  cliente_nombre: string;
+  cliente_telefono: string;
+  cliente_dni?: string;
+  metodo_pago: string;
+  metodo_entrega?: string;
+  estado: string;
+  total: number;
+  creado_en: string;
+  notas?: string;
+}
+
+export async function getRecentOrders(limit = 8): Promise<PedidoReciente[]> {
+  try {
+    const { data, error } = await supabase
+      .from('pedidos')
+      .select('id, codigo_pedido, cliente_nombre, cliente_telefono, cliente_dni, metodo_pago, metodo_entrega, estado, total, creado_en, notas')
+      .order('creado_en', { ascending: false })
+      .limit(limit);
+
+    if (!error && data) {
+      return data as PedidoReciente[];
+    }
+  } catch (err) {
+    console.error('Error al obtener pedidos recientes de Supabase:', err);
+  }
+  return [];
+}
+
+export async function updateOrderStatus(
+  pedidoId: string,
+  nuevoEstado: 'PENDIENTE' | 'PAGADO' | 'EN_CAMINO' | 'ENTREGADO' | 'CANCELADO'
+): Promise<boolean> {
+  try {
+    const { error } = await supabase
+      .from('pedidos')
+      .update({ estado: nuevoEstado, actualizado_en: new Date().toISOString() })
+      .eq('id', pedidoId);
+
+    if (!error) {
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new Event('galindo_pedido_web_realizado'));
+      }
+      return true;
+    }
+    return false;
+  } catch (err) {
+    console.error('Error al actualizar estado del pedido:', err);
+    return false;
+  }
+}
+

@@ -78,9 +78,7 @@ export async function createProduct(
 
     const slug = `${slugBase}-${Date.now().toString().slice(-4)}`;
 
-    const defaultImg =
-      'https://images.unsplash.com/photo-1621607512214-68297480165e?auto=format&fit=crop&w=800&q=80';
-    const imagenes = input.imagen_url && input.imagen_url.trim() ? [input.imagen_url.trim()] : [defaultImg];
+    const imagenes = input.imagen_url && input.imagen_url.trim() ? [input.imagen_url.trim()] : [];
 
     let finalSku = input.sku ? input.sku.trim().toUpperCase() : '';
     if (!finalSku) {

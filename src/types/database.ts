@@ -114,6 +114,14 @@ export interface Pedido {
 export type TurnoCurso = 'MANANA' | 'TARDE' | 'NOCHE' | 'SABATINO' | 'DOMINICAL';
 export type EstadoAcademico = 'MATRICULADO' | 'EN_CURSO' | 'EGRESADO' | 'RETIRADO' | 'SUSPENDIDO';
 
+export interface TurnoOption {
+  id: string;
+  nombre: string;
+  horario: string;
+  dias?: string;
+  vacantesDisponibles: number;
+}
+
 export interface Curso {
   id: string;
   titulo: string;
@@ -129,6 +137,8 @@ export interface Curso {
   descripcion_kit?: string;
   imagen_url: string;
   activo: boolean;
+  turnos?: TurnoOption[];
+  beneficios?: any[];
 }
 
 export interface HorarioCurso {
@@ -172,14 +182,20 @@ export interface Matricula {
   alumno?: Alumno;
   curso_id: string;
   curso?: Curso;
-  horario_id: string;
+  curso_nombre?: string;
+  horario_id?: string;
   horario?: HorarioCurso;
+  sede?: string;
+  turno?: TurnoCurso | string;
   fecha_matricula: string;
+  fecha_inicio?: string;
   estado: EstadoAcademico;
   monto_matricula_pagado: number;
   total_curso: number;
   saldo_pendiente: number;
   kit_entregado: boolean;
+  fecha_entrega_kit?: string | null;
+  notas?: string;
   cuotas: CuotaMatricula[];
 }
 

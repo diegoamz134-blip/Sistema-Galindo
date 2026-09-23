@@ -7,12 +7,13 @@ import {
   ChevronLeft,
   ChevronRight,
   Eye,
-  ShoppingBag,
+  ShoppingCart,
   Check,
   Pause,
   Play,
   ArrowRight,
   Sparkles,
+  Boxes,
 } from 'lucide-react';
 import { Producto } from '@/types/database';
 import { formatCurrency } from '@/lib/utils';
@@ -31,17 +32,54 @@ export function FeaturedProductsCarousel({
   // Categoría seleccionada para filtro rápido
   const [categoriaActiva, setCategoriaActiva] = useState<string>('TODOS');
   
-  // Filtrado de productos
+  // Filtrado de productos (Soporta IDs de Supabase, slugs y nombres)
   const productosFiltrados = productos.filter((prod) => {
     if (categoriaActiva === 'TODOS') return true;
+    
+    const catSlug = (prod.categoria?.slug || '').toLowerCase();
+    const catNom = (prod.categoria?.nombre || '').toLowerCase();
+    const prodNom = (prod.nombre || '').toLowerCase();
+
     if (categoriaActiva === 'MAQUINAS') {
-      return prod.categoria_id === 'cat-1' || prod.categoria_id === 'cat-2' || prod.categoria_id === 'cat-3';
+      return (
+        prod.categoria_id === 'cat-1' ||
+        prod.categoria_id === 'cat-2' ||
+        prod.categoria_id === 'cat-3' ||
+        catSlug.includes('maquina') ||
+        catSlug.includes('clipper') ||
+        catSlug.includes('patillera') ||
+        catSlug.includes('shaver') ||
+        catNom.includes('máquina') ||
+        catNom.includes('clipper') ||
+        catNom.includes('patillera') ||
+        prodNom.includes('clipper') ||
+        prodNom.includes('shaver') ||
+        prodNom.includes('trimmer') ||
+        prodNom.includes('máquina')
+      );
     }
     if (categoriaActiva === 'TIJERAS_ACC') {
-      return prod.categoria_id === 'cat-4' || prod.categoria_id === 'cat-5';
+      return (
+        prod.categoria_id === 'cat-4' ||
+        prod.categoria_id === 'cat-5' ||
+        catSlug.includes('tijera') ||
+        catSlug.includes('accesorio') ||
+        catNom.includes('tijera') ||
+        catNom.includes('accesorio') ||
+        prodNom.includes('tijera') ||
+        prodNom.includes('navaja') ||
+        prodNom.includes('peine') ||
+        prodNom.includes('capa')
+      );
     }
     if (categoriaActiva === 'KITS') {
-      return prod.categoria_id === 'cat-7';
+      return (
+        prod.categoria_id === 'cat-7' ||
+        catSlug.includes('kit') ||
+        catNom.includes('kit') ||
+        prodNom.includes('kit') ||
+        prodNom.includes('combo')
+      );
     }
     return true;
   });
@@ -278,12 +316,19 @@ export function FeaturedProductsCarousel({
                 <div className="h-full rounded-2xl bg-white border border-zinc-200 overflow-hidden flex flex-col justify-between hover:border-zinc-900 hover:shadow-xl transition-all duration-300 group relative">
                   
                   {/* Imagen del Producto con Overlay y Badges */}
-                  <div className="relative aspect-square w-full bg-zinc-100 overflow-hidden border-b border-zinc-100">
-                    <img
-                      src={prod.imagenes[0]}
-                      alt={prod.nombre}
-                      className="w-full h-full object-cover group-hover:scale-106 transition-transform duration-500 ease-out"
-                    />
+                  <div className="relative aspect-square w-full bg-zinc-100 overflow-hidden border-b border-zinc-100 flex items-center justify-center">
+                    {prod.imagenes && prod.imagenes.length > 0 ? (
+                      <img
+                        src={prod.imagenes[0]}
+                        alt={prod.nombre}
+                        className="w-full h-full object-cover group-hover:scale-106 transition-transform duration-500 ease-out"
+                      />
+                    ) : (
+                      <div className="flex flex-col items-center justify-center text-zinc-400 opacity-60">
+                        <Boxes className="w-10 h-10 mb-1" />
+                        <span className="text-[9px] font-mono uppercase tracking-widest">Sin Foto</span>
+                      </div>
+                    )}
 
                     {/* Insignia de Oferta (si aplica) */}
                     {prod.precio_oferta && prod.precio_oferta < prod.precio_venta && (
@@ -351,7 +396,7 @@ export function FeaturedProductsCarousel({
                           </>
                         ) : (
                           <>
-                            <ShoppingBag className="w-3.5 h-3.5" />
+                            <ShoppingCart className="w-3.5 h-3.5" />
                             <span>Añadir</span>
                           </>
                         )}

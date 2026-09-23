@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Check, ShoppingBag, X, ArrowRight } from 'lucide-react';
+import { Check, ShoppingCart, X, ArrowRight } from 'lucide-react';
 import { useCart } from '@/context/CartContext';
 import { formatCurrency } from '@/lib/utils';
 
@@ -65,7 +65,7 @@ export function CartToastNotification() {
               }}
               className="px-3 py-1.5 rounded-xl bg-white text-zinc-950 hover:bg-zinc-200 font-bold text-xs flex items-center gap-1 shrink-0 transition-all cursor-pointer shadow-sm active:scale-95"
             >
-              <ShoppingBag className="w-3.5 h-3.5" />
+              <ShoppingCart className="w-3.5 h-3.5" />
               <span className="hidden xs:inline">Ver Carrito</span>
               <ArrowRight className="w-3 h-3" />
             </button>

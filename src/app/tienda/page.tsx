@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { Search, Eye, ShoppingBag, UserCheck, RefreshCw, Boxes } from 'lucide-react';
+import { Search, Eye, ShoppingCart, UserCheck, RefreshCw, Boxes } from 'lucide-react';
 import { Navbar } from '@/components/layout/Navbar';
 import { Footer } from '@/components/layout/Footer';
 import { CartDrawer } from '@/components/shop/CartDrawer';
@@ -32,8 +32,8 @@ export default function TiendaPage() {
 
   const [quickViewProducto, setQuickViewProducto] = useState<Producto | null>(null);
 
-  // Marcas comunes en barbería
-  const marcas = ['Wahl', 'BaBylissPRO', 'Andis', 'Galindo', 'Suavecito'];
+  // Marcas comunes en barbería y tattoo
+  const marcas = ['Wahl', 'BaBylissPRO', 'Andis', 'JRL', 'Dynamic', 'Galindo'];
 
   useEffect(() => {
     let isMounted = true;
@@ -218,7 +218,7 @@ export default function TiendaPage() {
               <Search className="w-4 h-4 text-zinc-400 absolute left-3.5 top-3" />
               <input
                 type="text"
-                placeholder="Buscar máquinas, tijeras, repuestos por nombre o SKU..."
+                placeholder="Buscar máquinas, agujas, tintas, repuestos por nombre o SKU..."
                 value={busqueda}
                 onChange={(e) => setBusqueda(e.target.value)}
                 className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-white border border-zinc-300 text-zinc-900 text-xs focus:border-black outline-none shadow-sm transition-colors"
@@ -273,7 +273,7 @@ export default function TiendaPage() {
                   const img =
                     prod.imagenes && prod.imagenes.length > 0
                       ? prod.imagenes[0]
-                      : 'https://images.unsplash.com/photo-1621607512214-68297480165e?auto=format&fit=crop&w=800&q=80';
+                      : null;
 
                   return (
                     <motion.div
@@ -285,12 +285,19 @@ export default function TiendaPage() {
                       className="rounded-xl bg-white border border-zinc-200 overflow-hidden flex flex-col justify-between hover:border-zinc-400 hover:shadow-md transition-all group"
                     >
                       {/* Imagen con botón de vista rápida en hover */}
-                      <div className="relative aspect-square w-full bg-zinc-100 overflow-hidden border-b border-zinc-100">
-                        <img
-                          src={img}
-                          alt={prod.nombre}
-                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                        />
+                      <div className="relative aspect-square w-full bg-zinc-100 overflow-hidden border-b border-zinc-100 flex items-center justify-center">
+                        {img ? (
+                          <img
+                            src={img}
+                            alt={prod.nombre}
+                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                          />
+                        ) : (
+                          <div className="flex flex-col items-center justify-center text-zinc-400 gap-1.5 opacity-60">
+                            <Boxes className="w-8 h-8" />
+                            <span className="text-[10px] font-mono uppercase tracking-widest">Sin Foto</span>
+                          </div>
+                        )}
 
                         {/* Badges superiores */}
                         <div className="absolute top-2.5 left-2.5 flex flex-col gap-1">
@@ -355,7 +362,7 @@ export default function TiendaPage() {
                             onClick={(e) => handleAddToCart(prod, e)}
                             className="px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-black text-white hover:bg-zinc-800 transition-colors shadow-sm flex items-center gap-1.5 cursor-pointer active:scale-95"
                           >
-                            <ShoppingBag className="w-3.5 h-3.5" />
+                            <ShoppingCart className="w-3.5 h-3.5" />
                             <span>Comprar</span>
                           </button>
                         </div>

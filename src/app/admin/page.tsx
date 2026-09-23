@@ -12,6 +12,10 @@ import {
   CircleDollarSign,
   Receipt,
   Store,
+  ShoppingBag,
+  CheckCircle2,
+  Clock,
+  ChevronRight,
 } from 'lucide-react';
 import { formatCurrency } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
@@ -20,6 +24,9 @@ import {
   getDashboardSummary,
   getRecentMovements,
   getActiveStudents,
+  getRecentOrders,
+  updateOrderStatus,
+  PedidoReciente,
 } from '@/lib/dashboard-service';
 import { MovimientoCaja, Matricula } from '@/types/database';
 import { SalesTrendChart } from '@/components/admin/dashboard/SalesTrendChart';
@@ -30,6 +37,8 @@ export default function AdminDashboardPage() {
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [movimientos, setMovimientos] = useState<MovimientoCaja[]>([]);
   const [matriculas, setMatriculas] = useState<Matricula[]>([]);
+  const [pedidosRecientes, setPedidosRecientes] = useState<PedidoReciente[]>([]);
+  const [actualizandoPedidoId, setActualizandoPedidoId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [lastUpdated, setLastUpdated] = useState<string>('');
@@ -40,15 +49,17 @@ export default function AdminDashboardPage() {
 
     async function init() {
       try {
-        const [sumData, movData, matData] = await Promise.all([
+        const [sumData, movData, matData, pedData] = await Promise.all([
           getDashboardSummary(),
           getRecentMovements(),
           getActiveStudents(),
+          getRecentOrders(6),
         ]);
         if (!isMounted) return;
         setSummary(sumData);
         setMovimientos(movData);
         setMatriculas(matData);
+        setPedidosRecientes(pedData);
         const now = new Date();
         setLastUpdated(
           now.toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
@@ -72,14 +83,16 @@ export default function AdminDashboardPage() {
   const handleRefresh = async () => {
     setIsRefreshing(true);
     try {
-      const [sumData, movData, matData] = await Promise.all([
+      const [sumData, movData, matData, pedData] = await Promise.all([
         getDashboardSummary(),
         getRecentMovements(),
         getActiveStudents(),
+        getRecentOrders(6),
       ]);
       setSummary(sumData);
       setMovimientos(movData);
       setMatriculas(matData);
+      setPedidosRecientes(pedData);
       const now = new Date();
       setLastUpdated(
         now.toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
@@ -89,6 +102,21 @@ export default function AdminDashboardPage() {
       console.error('Error al recargar dashboard:', err);
     } finally {
       setIsRefreshing(false);
+    }
+  };
+
+  const handleMarcarEntregado = async (pedidoId: string) => {
+    setActualizandoPedidoId(pedidoId);
+    try {
+      const ok = await updateOrderStatus(pedidoId, 'ENTREGADO');
+      if (ok) {
+        setPedidosRecientes((prev) =>
+          prev.map((p) => (p.id === pedidoId ? { ...p, estado: 'ENTREGADO' } : p))
+        );
+        handleRefresh();
+      }
+    } finally {
+      setActualizandoPedidoId(null);
     }
   };
 
@@ -109,12 +137,14 @@ export default function AdminDashboardPage() {
     window.addEventListener('focus', onFocus);
     window.addEventListener('storage', onFocus);
     window.addEventListener('galindo_pos_venta_realizada', onFocus);
+    window.addEventListener('galindo_pedido_web_realizado', onFocus);
 
     return () => {
       supabase.removeChannel(channel);
       window.removeEventListener('focus', onFocus);
       window.removeEventListener('storage', onFocus);
       window.removeEventListener('galindo_pos_venta_realizada', onFocus);
+      window.removeEventListener('galindo_pedido_web_realizado', onFocus);
     };
   }, []);
 
@@ -301,8 +331,100 @@ export default function AdminDashboardPage() {
           <TopProductsRanking key={`top-${refreshKey}`} />
         </div>
 
-        {/* Columna Derecha (2 cols): Movimientos de Caja Recientes & Alumnos */}
+        {/* Columna Derecha (2 cols): Pedidos Web en Vivo, Movimientos & Alumnos */}
         <div className="lg:col-span-2 space-y-6">
+
+          {/* Pedidos Web y Mostrador en Vivo */}
+          <div className="p-6 rounded-2xl bg-white border border-zinc-200 shadow-sm space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-xs font-mono uppercase tracking-wider text-zinc-500">
+                <ShoppingBag className="w-3.5 h-3.5 text-zinc-900" />
+                <span>Pedidos Web & Mostrador en Vivo</span>
+                {pedidosRecientes.filter((p) => p.estado === 'PENDIENTE').length > 0 && (
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200 animate-pulse">
+                    {pedidosRecientes.filter((p) => p.estado === 'PENDIENTE').length} Pendientes
+                  </span>
+                )}
+              </div>
+              <Link
+                href="/admin/pedidos"
+                className="text-xs font-bold text-zinc-900 hover:text-black hover:underline flex items-center gap-0.5"
+              >
+                <span>Ver todos</span>
+                <ChevronRight className="w-3.5 h-3.5" />
+              </Link>
+            </div>
+
+            <div className="divide-y divide-zinc-100 rounded-xl border border-zinc-100 overflow-hidden">
+              {pedidosRecientes.length === 0 ? (
+                <div className="p-6 text-center text-xs text-zinc-400 font-mono">
+                  No hay pedidos web o ventas registradas recientemente.
+                </div>
+              ) : (
+                pedidosRecientes.slice(0, 5).map((ped) => {
+                  const esPendiente = ped.estado === 'PENDIENTE';
+                  const isUpdating = actualizandoPedidoId === ped.id;
+
+                  return (
+                    <div
+                      key={ped.id}
+                      className="p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-zinc-50/80 transition-colors"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-black font-mono text-zinc-950">
+                            #{ped.codigo_pedido}
+                          </span>
+                          <span className="text-zinc-300">•</span>
+                          <p className="text-xs font-bold text-zinc-900 truncate">
+                            {ped.cliente_nombre}
+                          </p>
+                        </div>
+                        <p className="text-[11px] text-zinc-500 mt-0.5 font-mono">
+                          {ped.cliente_telefono ? `Tel: ${ped.cliente_telefono} • ` : ''}
+                          Pago: {ped.metodo_pago} • {ped.metodo_entrega || 'Recojo en Tienda'}
+                        </p>
+                      </div>
+
+                      <div className="flex items-center justify-between sm:justify-end gap-3 shrink-0">
+                        <span className="text-xs font-black font-mono text-zinc-950">
+                          {formatCurrency(ped.total)}
+                        </span>
+
+                        {esPendiente ? (
+                          <button
+                            type="button"
+                            onClick={() => handleMarcarEntregado(ped.id)}
+                            disabled={isUpdating}
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold bg-amber-500 hover:bg-amber-600 text-white shadow-xs transition-all cursor-pointer active:scale-95 disabled:opacity-50"
+                            title="Marcar este pedido como retirado / entregado"
+                          >
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                            <span>{isUpdating ? 'Actualizando...' : 'Entregar'}</span>
+                          </button>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                            <span>Entregado</span>
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            <div className="pt-1 text-center">
+              <Link
+                href="/admin/pedidos"
+                className="inline-flex items-center gap-1 text-xs font-bold text-zinc-600 hover:text-black hover:underline"
+              >
+                <span>Ir al Módulo Completo de Pedidos & Ventas →</span>
+              </Link>
+            </div>
+          </div>
+
           {/* Movimientos del Turno */}
           <div className="p-6 rounded-2xl bg-white border border-zinc-200 shadow-sm space-y-4">
             <div className="flex items-center justify-between">

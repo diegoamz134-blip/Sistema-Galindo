@@ -544,18 +544,22 @@ export default function AdminProductosPage() {
                   const img =
                     p.imagenes && p.imagenes.length > 0
                       ? p.imagenes[0]
-                      : DEFAULT_PRODUCT_IMAGE;
+                      : null;
 
                   return (
                     <tr key={p.id} className="hover:bg-zinc-50/70 transition-colors">
                       <td className="px-5 py-3.5">
                         <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-lg bg-zinc-100 border border-zinc-200 overflow-hidden shrink-0">
-                            <img
-                              src={img}
-                              alt={p.nombre}
-                              className="w-full h-full object-cover"
-                            />
+                          <div className="w-10 h-10 rounded-lg bg-zinc-100 border border-zinc-200 overflow-hidden shrink-0 flex items-center justify-center">
+                            {img ? (
+                              <img
+                                src={img}
+                                alt={p.nombre}
+                                className="w-full h-full object-cover"
+                              />
+                            ) : (
+                              <Boxes className="w-5 h-5 text-zinc-400 opacity-60" />
+                            )}
                           </div>
                           <div className="min-w-0">
                             <p className="font-bold text-zinc-900 truncate">{p.nombre}</p>

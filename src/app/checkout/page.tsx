@@ -15,7 +15,7 @@ import {
   Banknote,
   Smartphone,
   ExternalLink,
-  ShoppingBag,
+  ShoppingCart,
   Sparkles,
   Ticket,
   ChevronRight,
@@ -39,12 +39,25 @@ import { formatCurrency, generateWhatsAppLink, generateCode } from '@/lib/utils'
 import { exportarTicketPDF } from '@/lib/ticket-pdf';
 import { BUSINESS_INFO, SEDES, SedeId } from '@/lib/constants';
 import { MOCK_PRODUCTOS } from '@/lib/mock-data';
+import { procesarPedidoWeb, PedidoWebItem } from '@/lib/checkout-service';
 
 type MetodoPagoCheckout = 'YAPE' | 'PLIN' | 'EFECTIVO' | 'TRANSFERENCIA' | 'MIXTO';
 
 export default function CheckoutPage() {
-  const { cartItems, totalPrice, updateQuantity, removeFromCart, addToCart, sedeSeleccionada, setSedeSeleccionada } = useCart();
+  const {
+    cartItems,
+    totalPrice,
+    updateQuantity,
+    removeFromCart,
+    addToCart,
+    clearCart,
+    sedeSeleccionada,
+    setSedeSeleccionada,
+  } = useCart();
   const sedeActual = SEDES[sedeSeleccionada] || SEDES['ica'];
+
+  const [procesandoPedido, setProcesandoPedido] = useState(false);
+  const [errorPedido, setErrorPedido] = useState<string | null>(null);
 
   // Si entra con carrito vacío, usamos productos de muestra para que pueda interactuar
   const [localItems, setLocalItems] = useState(cartItems);
@@ -246,6 +259,84 @@ export default function CheckoutPage() {
     }
   };
 
+  const handleConfirmarYEmitirPedido = async () => {
+    setErrorPedido(null);
+
+    // Validar nombre
+    if (!nombre || nombre.trim().length < 3) {
+      setErrorPedido('Por favor ingresa tu nombre y apellido completo para registrar tu ticket.');
+      return;
+    }
+
+    // Validar teléfono
+    if (!telefono || telefono.replace(/\D/g, '').length < 8) {
+      setErrorPedido('Por favor ingresa un número de celular válido para coordinar tu recojo.');
+      return;
+    }
+
+    if (localItems.length === 0) {
+      setErrorPedido('Tu pedido está vacío. Agrega productos o un curso para continuar.');
+      return;
+    }
+
+    setProcesandoPedido(true);
+
+    try {
+      const itemsPayload: PedidoWebItem[] = localItems.map((item) => ({
+        producto: item.producto,
+        cantidad: item.cantidad,
+        precioUnitario: item.producto.precio_oferta || item.producto.precio_venta,
+        subtotal: (item.producto.precio_oferta || item.producto.precio_venta) * item.cantidad,
+        tipo: item.tipo,
+        matriculaMetadata: item.matriculaMetadata,
+      }));
+
+      const res = await procesarPedidoWeb({
+        codigoPedido: codigoOrden,
+        clienteNombre: nombre.trim(),
+        clienteTelefono: telefono.trim(),
+        clienteDni: numeroDocumento.trim() || undefined,
+        tipoDocumento,
+        sedeId: sedeSeleccionada,
+        metodoEntrega: 'RECOJO_SEDE',
+        metodoPago,
+        detallesPago:
+          metodoPago === 'MIXTO'
+            ? {
+                efectivo: numEfectivo,
+                digital: numDigital,
+                canalDigital: canalDigitalCruzado,
+              }
+            : metodoPago === 'EFECTIVO'
+            ? {
+                efectivo: typeof valorBillete === 'number' ? valorBillete : totalCalculado,
+                vuelto: vueltoCalculado,
+              }
+            : undefined,
+        notas,
+        items: itemsPayload,
+        subtotal: totalCalculado,
+        descuento: 0,
+        total: totalCalculado,
+      });
+
+      if (!res.success) {
+        throw new Error(res.error || 'No se pudo registrar el pedido en el servidor');
+      }
+
+      // Vaciar carrito tras emisión exitosa
+      clearCart();
+
+      // Abrir modal de ticket confirmado
+      setTicketConfirmadoModal(true);
+    } catch (err: any) {
+      console.error('Error al emitir pedido:', err);
+      setErrorPedido(err.message || 'Ocurrió un problema al procesar el pedido. Por favor intenta de nuevo.');
+    } finally {
+      setProcesandoPedido(false);
+    }
+  };
+
   const handleConfirmarPedidoWhatsApp = () => {
     let mensaje = `Hola Galindo Barber Supply (${sedeActual.nombre}).\n`;
     mensaje += `He generado mi orden para RECOJO EN TIENDA FÍSICA:\n\n`;
@@ -392,7 +483,7 @@ export default function CheckoutPage() {
               <div className="space-y-3">
                 {localItems.length === 0 ? (
                   <div className="text-center py-8 space-y-3 bg-zinc-50 rounded-xl p-4 border border-zinc-200">
-                    <ShoppingBag className="w-8 h-8 mx-auto text-zinc-400" />
+                    <ShoppingCart className="w-8 h-8 mx-auto text-zinc-400" />
                     <p className="text-xs font-semibold text-zinc-700">No hay artículos en tu lista</p>
                     <Link
                       href="/tienda"
@@ -1512,17 +1603,35 @@ export default function CheckoutPage() {
                   </p>
                 </div>
 
+                {/* Alerta de Error si faltan datos o falla el guardado */}
+                {errorPedido && (
+                  <div data-ignore-pdf="true" className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 shrink-0" />
+                    <span>{errorPedido}</span>
+                  </div>
+                )}
+
                 {/* BOTÓN PRINCIPAL DE GENERACIÓN Y CONFIRMACIÓN (Ignorados al imprimir PDF) */}
                 <div data-ignore-pdf="true" className="space-y-2 pt-1">
                   <motion.button
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.98 }}
                     type="button"
-                    onClick={() => setTicketConfirmadoModal(true)}
-                    className="w-full py-3.5 rounded-xl font-black text-xs uppercase tracking-wider bg-black text-white hover:bg-zinc-800 transition-all shadow-lg flex items-center justify-center gap-2 cursor-pointer active:scale-95"
+                    onClick={handleConfirmarYEmitirPedido}
+                    disabled={procesandoPedido}
+                    className="w-full py-3.5 rounded-xl font-black text-xs uppercase tracking-wider bg-black text-white hover:bg-zinc-800 transition-all shadow-lg flex items-center justify-center gap-2 cursor-pointer active:scale-95 disabled:opacity-50"
                   >
-                    <Ticket className="w-4 h-4" />
-                    <span>Confirmar & Emitir Ticket</span>
+                    {procesandoPedido ? (
+                      <>
+                        <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                        <span>Registrando en el Sistema...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Ticket className="w-4 h-4" />
+                        <span>Confirmar & Emitir Ticket</span>
+                      </>
+                    )}
                   </motion.button>
 
                   <button
@@ -1668,7 +1777,7 @@ export default function CheckoutPage() {
                   onClick={() => setTicketConfirmadoModal(false)}
                   className="w-full py-2.5 rounded-xl font-bold text-xs text-zinc-700 hover:text-black hover:bg-zinc-100 transition-colors flex items-center justify-center gap-2 border border-zinc-200"
                 >
-                  <ShoppingBag className="w-3.5 h-3.5" />
+                  <ShoppingCart className="w-3.5 h-3.5" />
                   <span>Seguir Comprando en la Tienda</span>
                 </Link>
               </div>

@@ -17,12 +17,15 @@ import {
   ShieldCheck,
   X,
   Store,
+  ShoppingBag,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/context/AuthContext';
+import { supabase } from '@/lib/supabase';
 
 const NAV_ITEMS = [
   { href: '/admin', label: 'Dashboard', icon: LayoutDashboard },
+  { href: '/admin/pedidos', label: 'Pedidos Web & Ventas', icon: ShoppingBag },
   { href: '/admin/pos', label: 'Punto de Venta (POS)', icon: Store },
   { href: '/admin/productos', label: 'Productos & Tienda', icon: Package },
   { href: '/admin/inventario', label: 'Inventario (Kardex)', icon: Boxes },
@@ -42,6 +45,25 @@ export function AdminSidebar({ mobileOpen = false, onCloseMobile }: AdminSidebar
   const router = useRouter();
   const { userMeta, signOut } = useAuth();
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [pedidosPendientes, setPedidosPendientes] = useState(0);
+
+  // Consultar pedidos pendientes en tiempo real
+  useEffect(() => {
+    async function checkPendientes() {
+      try {
+        const { count } = await supabase
+          .from('pedidos')
+          .select('id', { count: 'exact', head: true })
+          .eq('estado', 'PENDIENTE');
+        setPedidosPendientes(count || 0);
+      } catch {}
+    }
+    checkPendientes();
+
+    const handleUpdate = () => checkPendientes();
+    window.addEventListener('galindo_pedido_web_realizado', handleUpdate);
+    return () => window.removeEventListener('galindo_pedido_web_realizado', handleUpdate);
+  }, []);
 
   // Cerrar drawer móvil automáticamente al cambiar de ruta
   useEffect(() => {
@@ -142,8 +164,20 @@ export function AdminSidebar({ mobileOpen = false, onCloseMobile }: AdminSidebar
                     : 'text-zinc-600 hover:text-black hover:bg-zinc-100'
                 )}
               >
-                <Icon className={cn('w-4 h-4', isActive ? 'text-white' : 'text-zinc-500')} />
-                <span>{item.label}</span>
+                <Icon className={cn('w-4 h-4 shrink-0', isActive ? 'text-white' : 'text-zinc-500')} />
+                <span className="flex-1 truncate">{item.label}</span>
+                {item.href === '/admin/pedidos' && pedidosPendientes > 0 && (
+                  <span
+                    className={cn(
+                      'px-1.5 py-0.5 rounded-full text-[10px] font-bold font-mono shrink-0',
+                      isActive
+                        ? 'bg-amber-400 text-zinc-950'
+                        : 'bg-amber-100 text-amber-900 border border-amber-300 animate-pulse'
+                    )}
+                  >
+                    {pedidosPendientes}
+                  </span>
+                )}
               </Link>
             );
           })}
