@@ -327,7 +327,7 @@ export default function CursosPage() {
                   </div>
                   
                   {/* Paginación */}
-                  {cursoActivo.temario_detallado.length > 10 && (
+                  {cursoActivo.temario_detallado && cursoActivo.temario_detallado.length > 10 && (
                     <div className="flex items-center justify-between pt-3">
                       <button
                         type="button"
@@ -357,8 +357,8 @@ export default function CursosPage() {
 
                       <button
                         type="button"
-                        onClick={() => setTemarioPage((prev) => Math.min(Math.ceil(cursoActivo.temario_detallado.length / 10), prev + 1))}
-                        disabled={temarioPage === Math.ceil(cursoActivo.temario_detallado.length / 10)}
+                        onClick={() => setTemarioPage((prev) => Math.min(Math.ceil((cursoActivo.temario_detallado?.length || 0) / 10), prev + 1))}
+                        disabled={temarioPage === Math.ceil((cursoActivo.temario_detallado?.length || 0) / 10)}
                         className="px-3 py-1.5 rounded-lg text-xs font-semibold text-zinc-700 border border-zinc-200 bg-white hover:bg-zinc-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
                       >
                         Siguientes
