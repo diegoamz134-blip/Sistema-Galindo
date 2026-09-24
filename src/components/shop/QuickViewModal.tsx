@@ -2,9 +2,11 @@
 
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, ShoppingCart, Store, Check, Shield, Boxes } from 'lucide-react';
+import { X, ShoppingCart, Store, Check, Shield, Boxes, MapPin, AlertCircle } from 'lucide-react';
 import { Producto } from '@/types/database';
 import { formatCurrency } from '@/lib/utils';
+import { useCart } from '@/context/CartContext';
+import { SEDES } from '@/lib/constants';
 
 interface QuickViewModalProps {
   producto: Producto | null;
@@ -17,9 +19,17 @@ export function QuickViewModal({
   onClose,
   onAddToCart,
 }: QuickViewModalProps) {
+  const { sedeSeleccionada, setSedeSeleccionada } = useCart();
   if (!producto) return null;
 
   const precioFinal = producto.precio_oferta || producto.precio_venta;
+  const stockIca = producto.stock_ica ?? producto.stock;
+  const stockHuancayo = producto.stock_huancayo ?? 0;
+  const stockActualSede = sedeSeleccionada === 'ica' ? stockIca : stockHuancayo;
+  const sedeActual = SEDES[sedeSeleccionada] || SEDES['ica'];
+  const otraSedeKey = sedeSeleccionada === 'ica' ? 'huancayo' : 'ica';
+  const otraSede = SEDES[otraSedeKey];
+  const stockOtraSede = sedeSeleccionada === 'ica' ? stockHuancayo : stockIca;
 
   return (
     <AnimatePresence>
@@ -74,9 +84,20 @@ export function QuickViewModal({
               <div className="space-y-3">
                 <div className="flex items-center justify-between text-xs font-mono text-zinc-400">
                   <span>SKU: {producto.sku}</span>
-                  <span className="text-emerald-600 font-semibold flex items-center gap-1">
-                    <Check className="w-3 h-3" />
-                    Stock ({producto.stock})
+                  <span className={`font-semibold flex items-center gap-1 ${
+                    stockActualSede > 0 ? 'text-emerald-600' : 'text-amber-600'
+                  }`}>
+                    {stockActualSede > 0 ? (
+                      <>
+                        <Check className="w-3 h-3" />
+                        <span>Disp: {stockActualSede} un.</span>
+                      </>
+                    ) : (
+                      <>
+                        <AlertCircle className="w-3 h-3" />
+                        <span>Agotado en {sedeActual.ciudad}</span>
+                      </>
+                    )}
                   </span>
                 </div>
 
@@ -88,21 +109,81 @@ export function QuickViewModal({
                   {producto.descripcion}
                 </p>
 
+                {/* Disponibilidad transparente por Sede */}
+                <div className="p-2.5 rounded-xl bg-zinc-50 border border-zinc-200 space-y-1.5">
+                  <div className="flex items-center justify-between text-[10px] font-mono font-bold text-zinc-500 uppercase">
+                    <span>Disponibilidad por Sede:</span>
+                    <span>Total: {stockIca + stockHuancayo} un.</span>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    {/* Sede Ica */}
+                    <button
+                      type="button"
+                      onClick={() => setSedeSeleccionada('ica')}
+                      className={`p-2 rounded-lg border text-left transition-all cursor-pointer ${
+                        sedeSeleccionada === 'ica'
+                          ? 'bg-zinc-900 text-white border-black shadow-xs'
+                          : 'bg-white hover:bg-zinc-100 border-zinc-200 text-zinc-800'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-bold">Sede Ica</span>
+                        {sedeSeleccionada === 'ica' && <Check className="w-3 h-3 text-emerald-400" />}
+                      </div>
+                      <div className="mt-0.5 flex items-baseline justify-between">
+                        <span className={`text-xs font-bold font-mono ${
+                          stockIca > 0 
+                            ? (sedeSeleccionada === 'ica' ? 'text-emerald-400' : 'text-emerald-700') 
+                            : 'text-zinc-400'
+                        }`}>
+                          {stockIca > 0 ? `${stockIca} un.` : 'Agotado'}
+                        </span>
+                      </div>
+                    </button>
+
+                    {/* Sede Huancayo */}
+                    <button
+                      type="button"
+                      onClick={() => setSedeSeleccionada('huancayo')}
+                      className={`p-2 rounded-lg border text-left transition-all cursor-pointer ${
+                        sedeSeleccionada === 'huancayo'
+                          ? 'bg-zinc-900 text-white border-black shadow-xs'
+                          : 'bg-white hover:bg-zinc-100 border-zinc-200 text-zinc-800'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-bold">Sede Huancayo</span>
+                        {sedeSeleccionada === 'huancayo' && <Check className="w-3 h-3 text-emerald-400" />}
+                      </div>
+                      <div className="mt-0.5 flex items-baseline justify-between">
+                        <span className={`text-xs font-bold font-mono ${
+                          stockHuancayo > 0 
+                            ? (sedeSeleccionada === 'huancayo' ? 'text-emerald-400' : 'text-emerald-700') 
+                            : 'text-zinc-400'
+                        }`}>
+                          {stockHuancayo > 0 ? `${stockHuancayo} un.` : 'Agotado'}
+                        </span>
+                      </div>
+                    </button>
+                  </div>
+                </div>
+
                 {/* Sellos de Confianza */}
-                <div className="pt-2 border-t border-zinc-100 flex flex-wrap gap-2 text-[10px] text-zinc-500 font-medium">
+                <div className="pt-1 flex flex-wrap gap-2 text-[10px] text-zinc-500 font-medium">
                   <div className="flex items-center gap-1 bg-zinc-50 px-2.5 py-1 rounded-md border border-zinc-100">
                     <Shield className="w-3 h-3 text-zinc-700" />
                     <span>Garantía Oficial</span>
                   </div>
                   <div className="flex items-center gap-1 bg-zinc-50 px-2.5 py-1 rounded-md border border-zinc-100">
                     <Store className="w-3 h-3 text-zinc-700" />
-                    <span>Recojo en Sede o Envío</span>
+                    <span>Recojo en {sedeActual.nombre}</span>
                   </div>
                 </div>
               </div>
 
               {/* Precios y Botón */}
-              <div className="pt-4 border-t border-zinc-100 space-y-3">
+              <div className="pt-3 border-t border-zinc-100 space-y-2">
                 <div className="flex items-baseline justify-between">
                   <div>
                     <span className="text-[10px] text-zinc-400 block">Precio Final</span>
@@ -117,21 +198,42 @@ export function QuickViewModal({
                   </div>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    const coords = {
-                      x: e.clientX,
-                      y: e.clientY,
-                    };
-                    onAddToCart(producto, coords);
-                    onClose();
-                  }}
-                  className="w-full py-3 rounded-xl font-semibold text-xs bg-black text-white hover:bg-zinc-800 transition-colors uppercase tracking-wider flex items-center justify-center gap-2 shadow-sm cursor-pointer active:scale-95"
-                >
-                  <ShoppingCart className="w-4 h-4" />
-                  <span>Añadir al Pedido</span>
-                </button>
+                {stockActualSede > 0 ? (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      const coords = {
+                        x: e.clientX,
+                        y: e.clientY,
+                      };
+                      onAddToCart(producto, coords);
+                      onClose();
+                    }}
+                    className="w-full py-3 rounded-xl font-semibold text-xs bg-black text-white hover:bg-zinc-800 transition-colors uppercase tracking-wider flex items-center justify-center gap-2 shadow-sm cursor-pointer active:scale-95"
+                  >
+                    <ShoppingCart className="w-4 h-4" />
+                    <span>Añadir al Pedido ({sedeActual.ciudad})</span>
+                  </button>
+                ) : (
+                  <div className="space-y-1.5">
+                    <button
+                      type="button"
+                      disabled
+                      className="w-full py-3 rounded-xl font-semibold text-xs bg-zinc-100 border border-zinc-200 text-zinc-400 uppercase tracking-wider flex items-center justify-center gap-2 cursor-not-allowed"
+                    >
+                      <span>Agotado en Sede {sedeActual.ciudad}</span>
+                    </button>
+                    {stockOtraSede > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setSedeSeleccionada(otraSedeKey)}
+                        className="w-full py-1 text-center text-xs font-bold text-zinc-900 hover:underline cursor-pointer flex items-center justify-center gap-1"
+                      >
+                        <span>Cambiar a Sede {otraSede.ciudad} (Hay {stockOtraSede} un.)</span>
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
 
             </div>

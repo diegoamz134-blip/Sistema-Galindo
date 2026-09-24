@@ -7,6 +7,8 @@ export interface RegistrarMovimientoInput {
   tipo: TipoMovimientoInventario;
   cantidad: number;
   motivo: string;
+  sede?: 'ica' | 'huancayo';
+  sede_destino?: 'ica' | 'huancayo';
   usuario_id?: string;
   usuario_nombre?: string;
   referencia_id?: string;
@@ -15,6 +17,7 @@ export interface RegistrarMovimientoInput {
 export interface KardexFiltros {
   productoId?: string;
   tipo?: TipoMovimientoInventario | 'TODOS';
+  sede?: 'ica' | 'huancayo' | 'TODAS';
   busqueda?: string;
   pagina?: number;
   porPagina?: number;
@@ -95,6 +98,10 @@ export async function getMovimientosKardexPaginado(
 
     if (filtros?.tipo && filtros.tipo !== 'TODOS') {
       query = query.eq('tipo', filtros.tipo);
+    }
+
+    if (filtros?.sede && filtros.sede !== 'TODAS') {
+      query = query.eq('sede', filtros.sede);
     }
 
     if (filtros?.busqueda && filtros.busqueda.trim()) {
@@ -179,7 +186,7 @@ export async function getProductosParaKardex(): Promise<Producto[]> {
   try {
     const { data, error } = await supabase
       .from('productos')
-      .select('id, nombre, sku, stock, stock_minimo, imagenes, precio_venta, activo')
+      .select('id, nombre, sku, stock, stock_ica, stock_huancayo, stock_minimo, imagenes, precio_venta, activo')
       .eq('activo', true)
       .order('nombre', { ascending: true });
 
@@ -216,7 +223,7 @@ export async function registrarMovimientoKardex(
     // A. Obtener el stock actual más reciente del producto desde Supabase
     const { data: prod, error: prodErr } = await supabase
       .from('productos')
-      .select('id, nombre, sku, stock')
+      .select('id, nombre, sku, stock, stock_ica, stock_huancayo')
       .eq('id', input.producto_id)
       .single();
 
@@ -227,7 +234,11 @@ export async function registrarMovimientoKardex(
       };
     }
 
-    const stockAnterior = typeof prod.stock === 'number' ? prod.stock : 0;
+    const sedeOperacion = input.sede || 'ica';
+    const esHuancayo = sedeOperacion === 'huancayo';
+    const stockAnterior = esHuancayo
+      ? (typeof prod.stock_huancayo === 'number' ? prod.stock_huancayo : 0)
+      : (typeof prod.stock_ica === 'number' ? prod.stock_ica : (typeof prod.stock === 'number' ? prod.stock : 0));
     let stockNuevo = stockAnterior;
 
     // B. Calcular el stock resultante según el tipo de operación
@@ -241,7 +252,7 @@ export async function registrarMovimientoKardex(
         if (stockAnterior < input.cantidad) {
           return {
             success: false,
-            error: `Stock insuficiente para esta salida. Solo hay ${stockAnterior} unidades disponibles en inventario.`,
+            error: `Stock insuficiente en Sede ${esHuancayo ? 'Huancayo' : 'Ica'}. Solo hay ${stockAnterior} unidades disponibles.`,
           };
         }
         stockNuevo = Math.max(0, stockAnterior - input.cantidad);
@@ -255,13 +266,19 @@ export async function registrarMovimientoKardex(
         stockNuevo = stockAnterior;
     }
 
-    // C. Actualizar el stock en la tabla 'productos'
+    // C. Actualizar el stock en la tabla 'productos' para la sede indicada
+    const updatePayload: Record<string, unknown> = {
+      actualizado_en: new Date().toISOString(),
+    };
+    if (esHuancayo) {
+      updatePayload.stock_huancayo = stockNuevo;
+    } else {
+      updatePayload.stock_ica = stockNuevo;
+    }
+
     const { error: updateErr } = await supabase
       .from('productos')
-      .update({
-        stock: stockNuevo,
-        actualizado_en: new Date().toISOString(),
-      })
+      .update(updatePayload)
       .eq('id', input.producto_id);
 
     if (updateErr) {
@@ -279,6 +296,7 @@ export async function registrarMovimientoKardex(
       cantidad: input.tipo === 'AJUSTE' ? Math.abs(stockNuevo - stockAnterior) : input.cantidad,
       stock_anterior: stockAnterior,
       stock_nuevo: stockNuevo,
+      sede: sedeOperacion,
       motivo: input.motivo.trim(),
       usuario_nombre: input.usuario_nombre || 'Diego Galindo',
       referencia_id: input.referencia_id || null,
@@ -310,6 +328,109 @@ export async function registrarMovimientoKardex(
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : 'Error desconocido al registrar en Kardex';
     console.error('Error inesperado en registrarMovimientoKardex:', err);
+    return { success: false, error: msg };
+  }
+}
+
+// -------------------------------------------------------------------------
+// 4. Trasladar stock entre Sedes (Ica <-> Huancayo)
+// -------------------------------------------------------------------------
+export interface TrasladoStockInput {
+  producto_id: string;
+  sede_origen: 'ica' | 'huancayo';
+  sede_destino: 'ica' | 'huancayo';
+  cantidad: number;
+  motivo?: string;
+  usuario_id?: string;
+  usuario_nombre?: string;
+}
+
+export async function trasladarStockEntreSedes(
+  input: TrasladoStockInput
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    if (!input.producto_id) {
+      return { success: false, error: 'Debe seleccionar un producto para trasladar' };
+    }
+    if (input.sede_origen === input.sede_destino) {
+      return { success: false, error: 'La sede de origen y destino deben ser distintas' };
+    }
+    if (!input.cantidad || input.cantidad <= 0) {
+      return { success: false, error: 'La cantidad a trasladar debe ser mayor a 0' };
+    }
+
+    // A. Obtener el producto y su stock en ambas sedes
+    const { data: prod, error: prodErr } = await supabase
+      .from('productos')
+      .select('id, nombre, sku, stock, stock_ica, stock_huancayo')
+      .eq('id', input.producto_id)
+      .single();
+
+    if (prodErr || !prod) {
+      return { success: false, error: 'Producto no encontrado en la base de datos' };
+    }
+
+    const origenEsIca = input.sede_origen === 'ica';
+    const stockOrigen = origenEsIca
+      ? (typeof prod.stock_ica === 'number' ? prod.stock_ica : (typeof prod.stock === 'number' ? prod.stock : 0))
+      : (typeof prod.stock_huancayo === 'number' ? prod.stock_huancayo : 0);
+
+    const stockDestino = origenEsIca
+      ? (typeof prod.stock_huancayo === 'number' ? prod.stock_huancayo : 0)
+      : (typeof prod.stock_ica === 'number' ? prod.stock_ica : (typeof prod.stock === 'number' ? prod.stock : 0));
+
+    if (stockOrigen < input.cantidad) {
+      return {
+        success: false,
+        error: `Stock insuficiente en Sede ${input.sede_origen.toUpperCase()}. Solo hay ${stockOrigen} unidades disponibles.`,
+      };
+    }
+
+    const nuevoOrigen = stockOrigen - input.cantidad;
+    const nuevoDestino = stockDestino + input.cantidad;
+
+    // B. Actualizar stock_ica y stock_huancayo atómicamente
+    const { error: updateErr } = await supabase
+      .from('productos')
+      .update({
+        stock_ica: origenEsIca ? nuevoOrigen : nuevoDestino,
+        stock_huancayo: origenEsIca ? nuevoDestino : nuevoOrigen,
+        actualizado_en: new Date().toISOString(),
+      })
+      .eq('id', input.producto_id);
+
+    if (updateErr) {
+      return { success: false, error: `Error al actualizar stock: ${updateErr.message}` };
+    }
+
+    // C. Registrar en Kardex el movimiento de traslado
+    const motivoTexto = input.motivo?.trim()
+      ? input.motivo.trim()
+      : `Traslado de mercadería de Sede ${input.sede_origen.toUpperCase()} a Sede ${input.sede_destino.toUpperCase()}`;
+
+    const movimientoPayload: Record<string, unknown> = {
+      producto_id: input.producto_id,
+      tipo: 'TRASLADO_SEDE',
+      cantidad: input.cantidad,
+      stock_anterior: stockOrigen,
+      stock_nuevo: nuevoOrigen,
+      sede: input.sede_origen,
+      sede_destino: input.sede_destino,
+      motivo: motivoTexto,
+      usuario_nombre: input.usuario_nombre || 'Diego Galindo',
+      fecha: new Date().toISOString(),
+    };
+
+    if (input.usuario_id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(input.usuario_id)) {
+      movimientoPayload.usuario_id = input.usuario_id;
+    }
+
+    await supabase.from('movimientos_inventario').insert(movimientoPayload);
+
+    return { success: true };
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : 'Error al procesar traslado de mercadería';
+    console.error('Error en trasladarStockEntreSedes:', err);
     return { success: false, error: msg };
   }
 }

@@ -1,13 +1,13 @@
-'use client';
-
-import React, { useState } from 'react';
+import React from 'react';
 import { MapPin, Clock, Navigation, MessageCircle, Armchair, ShoppingBag, ShieldCheck, Check } from 'lucide-react';
 import { SEDES, SedeId } from '@/lib/constants';
+import { useCart } from '@/context/CartContext';
 
 export function SedeCentralSection() {
-  const [activeSede, setActiveSede] = useState<SedeId>('ica');
+  const { sedeSeleccionada, setSedeSeleccionada } = useCart();
+  const activeSede: SedeId = (sedeSeleccionada === 'huancayo' ? 'huancayo' : 'ica') as SedeId;
 
-  const sede = SEDES[activeSede];
+  const sede = SEDES[activeSede] || SEDES['ica'];
 
   const whatsappUrl = `https://wa.me/${sede.whatsapp}?text=${encodeURIComponent(
     `Hola Galindo Barber, deseo información sobre la ubicación y atención en la ${sede.nombre} (${sede.direccion}).`
@@ -46,7 +46,7 @@ export function SedeCentralSection() {
                       <button
                         key={key}
                         type="button"
-                        onClick={() => setActiveSede(key)}
+                        onClick={() => setSedeSeleccionada(key)}
                         className={`px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-2 ${
                           isSelected
                             ? 'bg-black text-white shadow-xs'

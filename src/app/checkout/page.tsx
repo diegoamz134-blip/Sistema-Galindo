@@ -524,6 +524,31 @@ export default function CheckoutPage() {
                           <p className="text-xs font-black text-zinc-950 mt-1 font-mono">
                             Subtotal: {formatCurrency(precioUnitario * item.cantidad)}
                           </p>
+
+                          {/* Estado de stock en la sede elegida */}
+                          {item.tipo !== 'matricula' && (
+                            (() => {
+                              const stockEnSede = sedeSeleccionada === 'ica' 
+                                ? (item.producto.stock_ica ?? item.producto.stock) 
+                                : (item.producto.stock_huancayo ?? 0);
+                              const stockOtraSede = sedeSeleccionada === 'ica'
+                                ? (item.producto.stock_huancayo ?? 0)
+                                : (item.producto.stock_ica ?? item.producto.stock);
+
+                              if (stockEnSede <= 0) {
+                                return (
+                                  <div className="mt-1 flex items-center gap-1 text-[10px] text-amber-800 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+                                    <AlertCircle className="w-3 h-3 text-amber-600 shrink-0" />
+                                    <span>
+                                      Agotado en {sedeActual.ciudad}
+                                      {stockOtraSede > 0 ? ` (Hay ${stockOtraSede} un. en ${SEDES[sedeSeleccionada === 'ica' ? 'huancayo' : 'ica'].ciudad})` : ''}
+                                    </span>
+                                  </div>
+                                );
+                              }
+                              return null;
+                            })()
+                          )}
                         </div>
 
                         {/* Stepper + / - */}

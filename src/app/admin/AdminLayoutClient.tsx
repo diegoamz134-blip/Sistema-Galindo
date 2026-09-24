@@ -10,15 +10,23 @@ import { useAuth } from '@/context/AuthContext';
 export function AdminLayoutClient({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { user, isLoading } = useAuth();
+  const { user, userMeta, isLoading } = useAuth();
   const isLoginPage = pathname === '/admin/login';
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   useEffect(() => {
-    if (!isLoading && !user && !isLoginPage) {
-      router.replace('/admin/login');
+    if (!isLoading && !isLoginPage) {
+      if (!user) {
+        router.replace('/admin/login');
+      } else if (userMeta?.role) {
+        const rolNormalizado = userMeta.role.toLowerCase().trim();
+        const rolesAutorizados = ['admin', 'superadmin', 'cajero', 'administrador'];
+        if (!rolesAutorizados.includes(rolNormalizado)) {
+          router.replace('/');
+        }
+      }
     }
-  }, [isLoading, user, isLoginPage, router]);
+  }, [isLoading, user, userMeta, isLoginPage, router]);
 
   // Si estamos en la página de login, no aplicar envoltorio del panel
   if (isLoginPage) {

@@ -7,6 +7,7 @@ import {
   getMovimientosKardexPaginado,
   getProductosParaKardex,
   registrarMovimientoKardex,
+  trasladarStockEntreSedes,
 } from '@/lib/kardex-service';
 import { supabase } from '@/lib/supabase';
 import {
@@ -26,12 +27,14 @@ import {
   Store,
   ChevronLeft,
   ChevronRight,
+  ArrowRightLeft,
+  Truck,
 } from 'lucide-react';
 
 const DEFAULT_PRODUCT_IMAGE =
   'https://images.unsplash.com/photo-1503951914875-452162b0f3f1?auto=format&fit=crop&q=80&w=300';
 
-const ITEMS_POR_PAGINA = 10;
+const ITEMS_POR_PAGINA = 20;
 
 export default function AdminInventarioPage() {
   const [movimientos, setMovimientos] = useState<MovimientoInventario[]>([]);
@@ -39,7 +42,7 @@ export default function AdminInventarioPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  // Paginación (10 registros por página)
+  // Paginación (20 registros por página)
   const [pagina, setPagina] = useState(1);
   const [totalRegistros, setTotalRegistros] = useState(0);
   const [totalPaginas, setTotalPaginas] = useState(1);
@@ -56,17 +59,29 @@ export default function AdminInventarioPage() {
   // Filtros
   const [busqueda, setBusqueda] = useState('');
   const [filtroTipo, setFiltroTipo] = useState<TipoMovimientoInventario | 'TODOS'>('TODOS');
+  const [filtroSede, setFiltroSede] = useState<'TODAS' | 'ica' | 'huancayo'>('TODAS');
   const [filtroProductoId, setFiltroProductoId] = useState<string>('todos');
 
-  // Modal de registro
+  // Modal de registro de movimiento
   const [showModalMovimiento, setShowModalMovimiento] = useState(false);
   const [selectedProdId, setSelectedProdId] = useState('');
   const [tipoMov, setTipoMov] = useState<TipoMovimientoInventario>('ENTRADA');
+  const [sedeModal, setSedeModal] = useState<'ica' | 'huancayo'>('ica');
   const [cantidad, setCantidad] = useState('');
   const [motivo, setMotivo] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  // Modal de Traslado entre Sedes (Ica <-> Huancayo)
+  const [showModalTraslado, setShowModalTraslado] = useState(false);
+  const [selectedProdTrasladoId, setSelectedProdTrasladoId] = useState('');
+  const [sedeOrigen, setSedeOrigen] = useState<'ica' | 'huancayo'>('ica');
+  const [sedeDestino, setSedeDestino] = useState<'ica' | 'huancayo'>('huancayo');
+  const [cantidadTraslado, setCantidadTraslado] = useState('');
+  const [motivoTraslado, setMotivoTraslado] = useState('Reabastecimiento de sede');
+  const [isSavingTraslado, setIsSavingTraslado] = useState(false);
+  const [formTrasladoError, setFormTrasladoError] = useState<string | null>(null);
 
   // -------------------------------------------------------------------------
   // 1. Cargar datos paginados (exactamente 10 por página)
@@ -79,6 +94,7 @@ export default function AdminInventarioPage() {
           getMovimientosKardexPaginado({
             productoId: filtroProductoId,
             tipo: filtroTipo,
+            sede: filtroSede,
             busqueda: busqueda.trim(),
             pagina: paginaDestino,
             porPagina: ITEMS_POR_PAGINA,
@@ -94,6 +110,7 @@ export default function AdminInventarioPage() {
 
         if (prodsData.length > 0) {
           setSelectedProdId((curr) => curr || prodsData[0].id);
+          setSelectedProdTrasladoId((curr) => curr || prodsData[0].id);
         }
       } catch (err) {
         console.error('Error al cargar datos del Kardex:', err);
@@ -102,7 +119,7 @@ export default function AdminInventarioPage() {
         if (!silencioso) setIsRefreshing(false);
       }
     },
-    [pagina, filtroProductoId, filtroTipo, busqueda]
+    [pagina, filtroProductoId, filtroTipo, filtroSede, busqueda]
   );
 
   // Efecto inicial y cuando cambia la página
@@ -113,6 +130,11 @@ export default function AdminInventarioPage() {
   // Reset a página 1 cuando cambian los filtros o el texto de búsqueda
   const handleCambioFiltroTipo = (tipo: TipoMovimientoInventario | 'TODOS') => {
     setFiltroTipo(tipo);
+    setPagina(1);
+  };
+
+  const handleCambioFiltroSede = (sede: 'TODAS' | 'ica' | 'huancayo') => {
+    setFiltroSede(sede);
     setPagina(1);
   };
 
@@ -158,13 +180,24 @@ export default function AdminInventarioPage() {
   }, [cargarDatos, pagina]);
 
   // -------------------------------------------------------------------------
-  // 3. Lógica del Producto Seleccionado en el Modal
+  // 3. Lógica del Producto Seleccionado en el Modal de Movimiento
   // -------------------------------------------------------------------------
   const productoSeleccionado = useMemo(() => {
     return productos.find((p) => p.id === selectedProdId) || productos[0];
   }, [productos, selectedProdId]);
 
-  const stockActualProd = productoSeleccionado?.stock ?? 0;
+  const stockActualProd = useMemo(() => {
+    if (!productoSeleccionado) return 0;
+    if (sedeModal === 'huancayo') {
+      return typeof productoSeleccionado.stock_huancayo === 'number'
+        ? productoSeleccionado.stock_huancayo
+        : 0;
+    }
+    return typeof productoSeleccionado.stock_ica === 'number'
+      ? productoSeleccionado.stock_ica
+      : (typeof productoSeleccionado.stock === 'number' ? productoSeleccionado.stock : 0);
+  }, [productoSeleccionado, sedeModal]);
+
   const cantParsed = parseInt(cantidad, 10) || 0;
 
   const stockProyectado = useMemo(() => {
@@ -205,7 +238,7 @@ export default function AdminInventarioPage() {
 
     if (stockInsuficiente) {
       setFormError(
-        `Stock insuficiente. El producto solo cuenta con ${stockActualProd} unidades disponibles.`
+        `Stock insuficiente en Sede ${sedeModal === 'huancayo' ? 'Huancayo' : 'Ica'}. Solo cuenta con ${stockActualProd} unidades disponibles.`
       );
       return;
     }
@@ -216,6 +249,7 @@ export default function AdminInventarioPage() {
         producto_id: selectedProdId,
         tipo: tipoMov,
         cantidad: cantParsed,
+        sede: sedeModal,
         motivo: motivo.trim(),
         usuario_nombre: 'Diego Galindo (Admin)',
       });
@@ -228,7 +262,7 @@ export default function AdminInventarioPage() {
         setShowModalMovimiento(false);
         setCantidad('');
         setMotivo('');
-        setToastMessage('¡Movimiento Kardex registrado exitosamente!');
+        setToastMessage(`¡Movimiento registrado con éxito en Sede ${sedeModal.toUpperCase()}!`);
         setTimeout(() => setToastMessage(null), 4000);
       } else {
         setFormError(res.error || 'Ocurrió un error al guardar el movimiento');
@@ -238,6 +272,89 @@ export default function AdminInventarioPage() {
       setFormError(msg);
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  // -------------------------------------------------------------------------
+  // 5. Traslado de Mercadería entre Sedes (Ica <-> Huancayo)
+  // -------------------------------------------------------------------------
+  const prodParaTraslado = useMemo(() => {
+    return productos.find((p) => p.id === selectedProdTrasladoId) || productos[0];
+  }, [productos, selectedProdTrasladoId]);
+
+  const stockOrigenActual = useMemo(() => {
+    if (!prodParaTraslado) return 0;
+    return sedeOrigen === 'ica'
+      ? (typeof prodParaTraslado.stock_ica === 'number' ? prodParaTraslado.stock_ica : (prodParaTraslado.stock ?? 0))
+      : (prodParaTraslado.stock_huancayo ?? 0);
+  }, [prodParaTraslado, sedeOrigen]);
+
+  const stockDestinoActual = useMemo(() => {
+    if (!prodParaTraslado) return 0;
+    return sedeDestino === 'ica'
+      ? (typeof prodParaTraslado.stock_ica === 'number' ? prodParaTraslado.stock_ica : (prodParaTraslado.stock ?? 0))
+      : (prodParaTraslado.stock_huancayo ?? 0);
+  }, [prodParaTraslado, sedeDestino]);
+
+  const cantTrasladoParsed = parseInt(cantidadTraslado, 10) || 0;
+  const stockTrasladoInsuficiente = cantTrasladoParsed > 0 && cantTrasladoParsed > stockOrigenActual;
+
+  const handleIntercambiarSedesTraslado = () => {
+    setSedeOrigen((prev) => (prev === 'ica' ? 'huancayo' : 'ica'));
+    setSedeDestino((prev) => (prev === 'ica' ? 'huancayo' : 'ica'));
+  };
+
+  const handleTrasladarMercaderia = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setFormTrasladoError(null);
+
+    const prodId = selectedProdTrasladoId || productos[0]?.id;
+    if (!prodId) {
+      setFormTrasladoError('Selecciona un producto para trasladar');
+      return;
+    }
+
+    if (sedeOrigen === sedeDestino) {
+      setFormTrasladoError('La sede de origen y la de destino deben ser distintas');
+      return;
+    }
+
+    if (cantTrasladoParsed <= 0) {
+      setFormTrasladoError('La cantidad a trasladar debe ser mayor a 0');
+      return;
+    }
+
+    if (stockTrasladoInsuficiente) {
+      setFormTrasladoError(`Stock insuficiente en Sede ${sedeOrigen.toUpperCase()}. Solo hay ${stockOrigenActual} unidades.`);
+      return;
+    }
+
+    setIsSavingTraslado(true);
+    try {
+      const res = await trasladarStockEntreSedes({
+        producto_id: prodId,
+        sede_origen: sedeOrigen,
+        sede_destino: sedeDestino,
+        cantidad: cantTrasladoParsed,
+        motivo: motivoTraslado.trim() || `Traslado de Sede ${sedeOrigen.toUpperCase()} a Sede ${sedeDestino.toUpperCase()}`,
+        usuario_nombre: 'Diego Galindo (Admin)',
+      });
+
+      if (res.success) {
+        setPagina(1);
+        await cargarDatos(false, 1);
+        setShowModalTraslado(false);
+        setCantidadTraslado('');
+        setToastMessage(`¡Traslado de ${cantTrasladoParsed} un. a Sede ${sedeDestino.toUpperCase()} completado!`);
+        setTimeout(() => setToastMessage(null), 4500);
+      } else {
+        setFormTrasladoError(res.error || 'No se pudo procesar el traslado');
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Error inesperado al trasladar mercadería';
+      setFormTrasladoError(msg);
+    } finally {
+      setIsSavingTraslado(false);
     }
   };
 
@@ -274,6 +391,24 @@ export default function AdminInventarioPage() {
             title="Refrescar datos"
           >
             <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+          </button>
+
+          <button
+            onClick={() => {
+              setFormTrasladoError(null);
+              setSelectedProdTrasladoId(productos[0]?.id || '');
+              setSedeOrigen('ica');
+              setSedeDestino('huancayo');
+              setCantidadTraslado('');
+              setMotivoTraslado('Reabastecimiento de sede');
+              setShowModalTraslado(true);
+            }}
+            className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl text-xs font-bold bg-white text-zinc-900 border border-zinc-300 hover:bg-zinc-50 shadow-xs transition-all active:scale-95"
+            title="Mover mercadería entre Sede Ica y Sede Huancayo"
+          >
+            <ArrowRightLeft className="w-4 h-4 text-purple-600" />
+            <span className="hidden sm:inline">Trasladar entre Sedes</span>
+            <span className="sm:hidden">Traslado</span>
           </button>
 
           <button
@@ -380,8 +515,19 @@ export default function AdminInventarioPage() {
             )}
           </div>
 
-          {/* Filtros por Tipo y Producto */}
+          {/* Filtros por Sede, Producto y Tipo */}
           <div className="flex flex-wrap items-center gap-2">
+            {/* Filtro por Sede */}
+            <select
+              value={filtroSede}
+              onChange={(e) => handleCambioFiltroSede(e.target.value as 'TODAS' | 'ica' | 'huancayo')}
+              className="px-3 py-2 bg-zinc-50 border border-zinc-200 rounded-xl text-xs text-zinc-700 outline-none focus:border-black font-semibold cursor-pointer"
+            >
+              <option value="TODAS">Todas las Sedes</option>
+              <option value="ica">Sede Ica</option>
+              <option value="huancayo">Sede Huancayo</option>
+            </select>
+
             {/* Filtro por Producto */}
             <select
               value={filtroProductoId}
@@ -397,12 +543,13 @@ export default function AdminInventarioPage() {
             </select>
 
             {/* Pestañas de Tipo de Movimiento */}
-            <div className="inline-flex bg-zinc-100 p-1 rounded-xl text-xs font-semibold">
+            <div className="inline-flex bg-zinc-100 p-1 rounded-xl text-xs font-semibold overflow-x-auto">
               {(
                 [
                   { id: 'TODOS', label: 'Todos' },
                   { id: 'ENTRADA', label: 'Entradas' },
                   { id: 'SALIDA', label: 'Salidas' },
+                  { id: 'TRASLADO_SEDE', label: 'Traslados' },
                   { id: 'USO_CLASE', label: 'Clases' },
                   { id: 'AJUSTE', label: 'Ajustes' },
                 ] as const
@@ -410,7 +557,7 @@ export default function AdminInventarioPage() {
                 <button
                   key={tab.id}
                   onClick={() => handleCambioFiltroTipo(tab.id)}
-                  className={`px-3 py-1.5 rounded-lg transition-all text-[11px] ${
+                  className={`px-3 py-1.5 rounded-lg transition-all text-[11px] whitespace-nowrap ${
                     filtroTipo === tab.id
                       ? 'bg-white text-zinc-950 shadow-xs font-bold'
                       : 'text-zinc-500 hover:text-zinc-900'
@@ -425,10 +572,11 @@ export default function AdminInventarioPage() {
 
         {/* Tabla Kardex (10 Registros por Página) */}
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs min-w-[850px]">
+          <table className="w-full text-left text-xs min-w-[950px]">
             <thead className="bg-zinc-50/80 text-zinc-500 uppercase tracking-wider border-b border-zinc-200">
               <tr>
                 <th className="px-5 py-3.5 font-semibold">Fecha & Hora</th>
+                <th className="px-5 py-3.5 font-semibold">Sede</th>
                 <th className="px-5 py-3.5 font-semibold">Producto</th>
                 <th className="px-5 py-3.5 font-semibold">Tipo</th>
                 <th className="px-5 py-3.5 font-semibold">Motivo / Detalle</th>
@@ -445,7 +593,7 @@ export default function AdminInventarioPage() {
                   <td colSpan={8} className="px-5 py-12 text-center text-zinc-400">
                     <div className="flex flex-col items-center justify-center gap-3">
                       <RefreshCw className="w-6 h-6 animate-spin text-zinc-400" />
-                      <p className="text-xs font-mono">Cargando 10 movimientos de inventario...</p>
+                      <p className="text-xs font-mono">Cargando 20 movimientos de inventario...</p>
                     </div>
                   </td>
                 </tr>
@@ -514,6 +662,15 @@ export default function AdminInventarioPage() {
                     );
                     variacionColor = 'text-blue-600';
                     signo = '-';
+                  } else if (m.tipo === 'TRASLADO_SEDE') {
+                    badge = (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[10px] font-bold font-mono bg-purple-50 text-purple-700 border border-purple-200">
+                        <ArrowRightLeft className="w-3 h-3" />
+                        TRASLADO
+                      </span>
+                    );
+                    variacionColor = 'text-purple-600';
+                    signo = '⇄ ';
                   } else if (m.tipo === 'AJUSTE') {
                     badge = (
                       <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[10px] font-bold font-mono bg-amber-50 text-amber-700 border border-amber-200">
@@ -533,6 +690,26 @@ export default function AdminInventarioPage() {
                         className="px-5 py-3.5 text-zinc-500 whitespace-nowrap font-mono text-[11px]"
                       >
                         {formatDateTime(m.fecha)}
+                      </td>
+
+                      {/* Sede */}
+                      <td className="px-5 py-3.5 whitespace-nowrap">
+                        {m.tipo === 'TRASLADO_SEDE' ? (
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-bold font-mono bg-purple-50 text-purple-700 border border-purple-200">
+                            <ArrowRightLeft className="w-3 h-3 text-purple-600 shrink-0" />
+                            {m.sede?.toUpperCase() || 'ICA'} ➔ {m.sede_destino?.toUpperCase() || 'HYO'}
+                          </span>
+                        ) : (
+                          <span
+                            className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[10px] font-bold font-mono border ${
+                              m.sede === 'huancayo'
+                                ? 'bg-amber-50 text-amber-800 border-amber-200'
+                                : 'bg-zinc-100 text-zinc-800 border-zinc-200'
+                            }`}
+                          >
+                            {m.sede === 'huancayo' ? 'Huancayo' : 'Ica'}
+                          </span>
+                        )}
                       </td>
 
                       {/* Producto */}
@@ -693,6 +870,43 @@ export default function AdminInventarioPage() {
             )}
 
             <form onSubmit={handleRegistrarMovimiento} className="space-y-4 text-xs">
+              {/* Sede Afectada */}
+              <div>
+                <label className="block font-bold text-zinc-700 uppercase tracking-wider mb-1.5">
+                  Sede de la Operación *
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setSedeModal('ica')}
+                    className={`p-2.5 rounded-xl border text-xs font-bold text-left transition-all cursor-pointer ${
+                      sedeModal === 'ica'
+                        ? 'bg-zinc-950 text-white border-zinc-950 shadow-xs'
+                        : 'bg-zinc-50 text-zinc-600 border-zinc-200 hover:bg-zinc-100'
+                    }`}
+                  >
+                    <p>Sede Ica</p>
+                    <span className="text-[10px] opacity-75 font-normal">
+                      Stock: {productoSeleccionado ? (productoSeleccionado.stock_ica ?? productoSeleccionado.stock) : 0} un.
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSedeModal('huancayo')}
+                    className={`p-2.5 rounded-xl border text-xs font-bold text-left transition-all cursor-pointer ${
+                      sedeModal === 'huancayo'
+                        ? 'bg-zinc-950 text-white border-zinc-950 shadow-xs'
+                        : 'bg-zinc-50 text-zinc-600 border-zinc-200 hover:bg-zinc-100'
+                    }`}
+                  >
+                    <p>Sede Huancayo</p>
+                    <span className="text-[10px] opacity-75 font-normal">
+                      Stock: {productoSeleccionado ? (productoSeleccionado.stock_huancayo ?? 0) : 0} un.
+                    </span>
+                  </button>
+                </div>
+              </div>
+
               {/* Selector de Producto */}
               <div>
                 <label className="block font-bold text-zinc-700 uppercase tracking-wider mb-1.5">
@@ -703,11 +917,14 @@ export default function AdminInventarioPage() {
                   onChange={(e) => setSelectedProdId(e.target.value)}
                   className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-50 border border-zinc-300 text-zinc-950 font-medium outline-none focus:border-black focus:bg-white transition-all text-xs"
                 >
-                  {productos.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.nombre} — SKU: {p.sku} (Stock actual: {p.stock} un.)
-                    </option>
-                  ))}
+                  {productos.map((p) => {
+                    const stockSede = sedeModal === 'huancayo' ? (p.stock_huancayo ?? 0) : (p.stock_ica ?? p.stock);
+                    return (
+                      <option key={p.id} value={p.id}>
+                        {p.nombre} — SKU: {p.sku} (Stock en {sedeModal === 'huancayo' ? 'Huancayo' : 'Ica'}: {stockSede} un.)
+                      </option>
+                    );
+                  })}
                 </select>
               </div>
 
@@ -869,6 +1086,203 @@ export default function AdminInventarioPage() {
                     </>
                   ) : (
                     <span>Confirmar y Guardar</span>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+      {/* ========================================================================= */}
+      {/* Modal: Trasladar Stock entre Sedes (Ica <-> Huancayo)                      */}
+      {/* ========================================================================= */}
+      {showModalTraslado && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="w-full max-w-lg bg-white border border-zinc-200 rounded-2xl p-6 space-y-5 shadow-2xl">
+            {/* Encabezado Modal */}
+            <div className="flex items-center justify-between border-b border-zinc-100 pb-3">
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-xl bg-purple-50 text-purple-700 border border-purple-200">
+                  <ArrowRightLeft className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-zinc-950 uppercase tracking-wider">
+                    Traslado de Mercadería entre Sedes
+                  </h3>
+                  <p className="text-[11px] text-zinc-500">
+                    Mueve stock de Ica a Huancayo (o viceversa) con registro en Kardex.
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowModalTraslado(false)}
+                className="p-1 rounded-lg text-zinc-400 hover:text-zinc-600 hover:bg-zinc-100"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Error Formulario */}
+            {formTrasladoError && (
+              <div className="flex items-start gap-2.5 p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs">
+                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-rose-600" />
+                <span>{formTrasladoError}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleTrasladarMercaderia} className="space-y-4 text-xs">
+              {/* Selector de Producto */}
+              <div>
+                <label className="block font-bold text-zinc-700 uppercase tracking-wider mb-1.5">
+                  Producto a Trasladar *
+                </label>
+                <select
+                  value={selectedProdTrasladoId}
+                  onChange={(e) => setSelectedProdTrasladoId(e.target.value)}
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-50 border border-zinc-300 text-zinc-950 font-medium outline-none focus:border-black focus:bg-white transition-all text-xs"
+                >
+                  {productos.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.nombre} — (ICA: {p.stock_ica ?? p.stock} un. | HYO: {p.stock_huancayo ?? 0} un.)
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Sedes Origen y Destino */}
+              <div className="p-3.5 rounded-xl bg-zinc-50 border border-zinc-200 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-bold text-zinc-700 uppercase tracking-wider">
+                    Ruta del Traslado
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleIntercambiarSedesTraslado}
+                    className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-bold bg-white border border-zinc-300 hover:border-zinc-400 text-zinc-700 shadow-2xs transition-colors cursor-pointer"
+                  >
+                    <ArrowRightLeft className="w-3 h-3 text-purple-600" />
+                    <span>Invertir Ruta</span>
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  {/* Origen */}
+                  <div className="p-3 rounded-xl bg-white border border-zinc-200">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-rose-600 block">
+                      Sede Origen (Sale)
+                    </span>
+                    <p className="text-xs font-bold text-zinc-900 mt-0.5">
+                      {sedeOrigen === 'ica' ? 'Sede Ica' : 'Sede Huancayo'}
+                    </p>
+                    <span className="text-[10px] font-mono text-zinc-500 mt-1 block">
+                      Disponible: <b className="text-zinc-800">{stockOrigenActual} un.</b>
+                    </span>
+                  </div>
+
+                  {/* Destino */}
+                  <div className="p-3 rounded-xl bg-white border border-zinc-200">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-600 block">
+                      Sede Destino (Entra)
+                    </span>
+                    <p className="text-xs font-bold text-zinc-900 mt-0.5">
+                      {sedeDestino === 'ica' ? 'Sede Ica' : 'Sede Huancayo'}
+                    </p>
+                    <span className="text-[10px] font-mono text-zinc-500 mt-1 block">
+                      Actual: <b className="text-zinc-800">{stockDestinoActual} un.</b>
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Cantidad y Motivo */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                <div>
+                  <label className="block font-bold text-zinc-700 uppercase tracking-wider mb-1.5">
+                    Cantidad a Trasladar *
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    max={stockOrigenActual}
+                    required
+                    placeholder="Ej: 5"
+                    value={cantidadTraslado}
+                    onChange={(e) => setCantidadTraslado(e.target.value)}
+                    className={`w-full px-3.5 py-2.5 rounded-xl bg-zinc-50 border text-zinc-950 font-mono font-bold outline-none focus:bg-white text-xs ${
+                      stockTrasladoInsuficiente
+                        ? 'border-rose-500 text-rose-700 bg-rose-50'
+                        : 'border-zinc-300 focus:border-black'
+                    }`}
+                  />
+                  {stockTrasladoInsuficiente && (
+                    <span className="text-[10px] text-rose-600 font-medium mt-1 block">
+                      Excede el stock de origen ({stockOrigenActual} un.)
+                    </span>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block font-bold text-zinc-700 uppercase tracking-wider mb-1.5">
+                    Motivo / Guía de Traslado
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="Ej: Abastecimiento inicial Huancayo"
+                    value={motivoTraslado}
+                    onChange={(e) => setMotivoTraslado(e.target.value)}
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-50 border border-zinc-300 text-zinc-950 outline-none focus:border-black focus:bg-white text-xs font-medium"
+                  />
+                </div>
+              </div>
+
+              {/* Caja de Proyección del Traslado */}
+              {cantTrasladoParsed > 0 && !stockTrasladoInsuficiente && (
+                <div className="p-3.5 rounded-xl bg-purple-50/60 border border-purple-200/80 flex items-center justify-between text-xs font-mono">
+                  <div>
+                    <span className="text-zinc-500 block text-[10px] uppercase tracking-wider">
+                      {sedeOrigen.toUpperCase()} Resultante
+                    </span>
+                    <span className="font-bold text-rose-600 text-sm">
+                      {stockOrigenActual - cantTrasladoParsed} un. (-{cantTrasladoParsed})
+                    </span>
+                  </div>
+
+                  <span className="text-purple-400 font-sans text-xs">➔</span>
+
+                  <div className="text-right">
+                    <span className="text-zinc-500 block text-[10px] uppercase tracking-wider">
+                      {sedeDestino.toUpperCase()} Resultante
+                    </span>
+                    <span className="font-bold text-emerald-600 text-sm">
+                      {stockDestinoActual + cantTrasladoParsed} un. (+{cantTrasladoParsed})
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {/* Botones de Acción */}
+              <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-zinc-100">
+                <button
+                  type="button"
+                  onClick={() => setShowModalTraslado(false)}
+                  disabled={isSavingTraslado}
+                  className="px-4 py-2 rounded-xl text-zinc-600 hover:text-zinc-950 font-medium transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingTraslado || stockTrasladoInsuficiente || cantTrasladoParsed <= 0}
+                  className="flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold bg-purple-700 text-white hover:bg-purple-800 shadow-md transition-all active:scale-95 disabled:opacity-50"
+                >
+                  {isSavingTraslado ? (
+                    <>
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                      <span>Procesando...</span>
+                    </>
+                  ) : (
+                    <span>Confirmar y Trasladar</span>
                   )}
                 </button>
               </div>

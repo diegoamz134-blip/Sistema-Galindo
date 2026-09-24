@@ -114,11 +114,12 @@ export function normalizarCurso(raw: any): Curso {
 
   return {
     ...raw,
+    sede: raw.sede || 'ica',
     turnos,
   };
 }
 
-export async function getCursosActivos(): Promise<Curso[]> {
+export async function getCursosActivos(sedeId?: string): Promise<Curso[]> {
   try {
     const { data, error } = await supabase
       .from('cursos')
@@ -126,13 +127,33 @@ export async function getCursosActivos(): Promise<Curso[]> {
       .eq('activo', true)
       .order('titulo', { ascending: true });
 
-    if (!error && data) {
-      return (data as any[]).map(normalizarCurso);
+    if (!error && data && data.length > 0) {
+      const allCursos = (data as any[]).map(normalizarCurso);
+      if (sedeId) {
+        const filtered = allCursos.filter((c) => {
+          const s = (c.sede || 'ica').toLowerCase();
+          return s === sedeId.toLowerCase() || s === 'ambas' || s === 'todas';
+        });
+        if (filtered.length > 0) {
+          return filtered;
+        }
+      } else {
+        return allCursos;
+      }
     }
   } catch (err) {
     console.warn('Error al consultar cursos activos en supabase:', err);
   }
-  return [];
+
+  // Fallback seguro a cursos mock oficiales configurados por sede
+  if (sedeId) {
+    const fallbackPorSede = MOCK_CURSOS.filter((c) => {
+      const s = (c.sede || 'ica').toLowerCase();
+      return s === sedeId.toLowerCase() || s === 'ambas' || s === 'todas';
+    });
+    if (fallbackPorSede.length > 0) return fallbackPorSede;
+  }
+  return MOCK_CURSOS;
 }
 
 // -------------------------------------------------------------------------

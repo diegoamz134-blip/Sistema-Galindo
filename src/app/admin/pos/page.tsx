@@ -82,20 +82,33 @@ export default function POSPage() {
     return () => clearInterval(timer);
   }, []);
 
-  // Cargar catálogo de productos
+  // Cargar catálogo de productos según la sede seleccionada
   const cargarProductos = useCallback(async () => {
     setIsLoadingProductos(true);
     try {
-      const data = await getPOSProducts();
+      const data = await getPOSProducts(sedeId);
       setProductos(data);
     } finally {
       setIsLoadingProductos(false);
     }
-  }, []);
+  }, [sedeId]);
 
   useEffect(() => {
     cargarProductos();
   }, [cargarProductos]);
+
+  // Cambiar de sede de manera segura
+  const handleCambiarSede = (nuevaSede: SedeId) => {
+    if (nuevaSede === sedeId) return;
+    if (cartItems.length > 0) {
+      const confirmar = window.confirm(
+        `Tienes artículos en el ticket de mostrador de ${sedeActual.nombre}. Cambiar a Sede ${SEDES[nuevaSede].ciudad} reiniciará el ticket actual para evitar mezclas de inventario. ¿Deseas continuar?`
+      );
+      if (!confirmar) return;
+      setCartItems([]);
+    }
+    setSedeId(nuevaSede);
+  };
 
 
 
@@ -104,11 +117,12 @@ export default function POSPage() {
     setCartItems((prev) => {
       const index = prev.findIndex((it) => it.producto.id === producto.id);
       const precioUnitario = producto.precio_oferta || producto.precio_venta;
+      const stockDisponible = sedeId === 'huancayo' ? (producto.stock_huancayo ?? 0) : (producto.stock_ica ?? producto.stock);
 
       if (index >= 0) {
         const itemActual = prev[index];
-        // Validar no exceder el stock disponible
-        if (itemActual.cantidad >= producto.stock) {
+        // Validar no exceder el stock disponible de la sede
+        if (itemActual.cantidad >= stockDisponible) {
           return prev;
         }
         const nuevaCantidad = itemActual.cantidad + 1;
@@ -206,8 +220,13 @@ export default function POSPage() {
         prev.map((p) => {
           const itemVendido = cartItems.find((it) => it.producto.id === p.id);
           if (itemVendido) {
+            const esHuancayo = sedeId === 'huancayo';
+            const prevSede = esHuancayo ? (p.stock_huancayo ?? 0) : (p.stock_ica ?? p.stock);
+            const nuevoSede = Math.max(0, prevSede - itemVendido.cantidad);
             return {
               ...p,
+              stock_ica: esHuancayo ? p.stock_ica : nuevoSede,
+              stock_huancayo: esHuancayo ? nuevoSede : p.stock_huancayo,
               stock: Math.max(0, p.stock - itemVendido.cantidad),
             };
           }
@@ -276,7 +295,7 @@ export default function POSPage() {
           <div className="flex items-center rounded-xl bg-zinc-100 p-1 border border-zinc-200">
             <button
               type="button"
-              onClick={() => setSedeId('ica')}
+              onClick={() => handleCambiarSede('ica')}
               className={`px-2.5 py-1 rounded-lg font-bold transition-all cursor-pointer ${
                 sedeId === 'ica'
                   ? 'bg-white text-zinc-950 shadow-2xs'
@@ -287,7 +306,7 @@ export default function POSPage() {
             </button>
             <button
               type="button"
-              onClick={() => setSedeId('huancayo')}
+              onClick={() => handleCambiarSede('huancayo')}
               className={`px-2.5 py-1 rounded-lg font-bold transition-all cursor-pointer ${
                 sedeId === 'huancayo'
                   ? 'bg-white text-zinc-950 shadow-2xs'
@@ -362,6 +381,7 @@ export default function POSPage() {
         >
           <POSProductCatalog
             productos={productos}
+            sedeId={sedeId}
             isLoading={isLoadingProductos}
             onAddToCart={handleAddToCart}
           />

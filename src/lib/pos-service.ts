@@ -51,29 +51,44 @@ export interface VentaRegistradaPOS {
 }
 
 /**
- * Obtiene el catálogo de productos disponibles en tiempo real desde Supabase
+ * Obtiene el catálogo de productos disponibles en tiempo real desde Supabase filtrado por sede
  */
-export async function getPOSProducts(): Promise<Producto[]> {
+export async function getPOSProducts(sedeId?: 'ica' | 'huancayo'): Promise<Producto[]> {
   try {
-    const { data, error } = await supabase
+    let query = supabase
       .from('productos')
       .select('*, categoria:categorias(*)')
       .eq('activo', true)
       .order('nombre', { ascending: true });
 
+    if (sedeId === 'huancayo') {
+      query = query.gt('stock_huancayo', 0);
+    } else if (sedeId === 'ica') {
+      query = query.or('stock_ica.gt.0,stock.gt.0');
+    }
+
+    const { data, error } = await query;
+
     if (error) {
       console.warn('Advertencia al consultar productos de Supabase:', error.message);
-      return MOCK_PRODUCTOS;
+      if (!sedeId || sedeId === 'ica') return MOCK_PRODUCTOS;
+      return [];
     }
 
     if (data && data.length > 0) {
       return data as Producto[];
     }
 
-    // Si la base de datos está vacía, retornar mock como respaldo para operar
+    // Para Huancayo si no hay stock físico registrado, no inventar datos mock de Ica
+    if (sedeId === 'huancayo') {
+      return [];
+    }
+
+    // Si la base de datos está vacía, retornar mock como respaldo para operar en Ica
     return MOCK_PRODUCTOS;
   } catch (err) {
     console.error('Error al cargar productos para POS:', err);
+    if (sedeId === 'huancayo') return [];
     return MOCK_PRODUCTOS;
   }
 }
@@ -140,25 +155,37 @@ export async function procesarVentaPOS(
       await supabase.from('pedido_items').insert(itemsPayload);
     }
 
-    // 3. Descontar stock e insertar movimientos de inventario
+    // 3. Descontar stock e insertar movimientos de inventario por sede
     for (const item of venta.items) {
       if (!item.producto.id.startsWith('mock-')) {
-        const nuevoStock = Math.max(0, (item.producto.stock || 0) - item.cantidad);
+        const esHuancayo = venta.sedeId === 'huancayo';
+        const stockPrev = esHuancayo
+          ? (item.producto.stock_huancayo ?? 0)
+          : (item.producto.stock_ica ?? item.producto.stock ?? 0);
+        const nuevoStock = Math.max(0, stockPrev - item.cantidad);
 
-        // Actualizar stock del producto
-        await supabase
-          .from('productos')
-          .update({ stock: nuevoStock })
-          .eq('id', item.producto.id);
+        // Actualizar stock de la sede correspondiente
+        if (esHuancayo) {
+          await supabase
+            .from('productos')
+            .update({ stock_huancayo: nuevoStock })
+            .eq('id', item.producto.id);
+        } else {
+          await supabase
+            .from('productos')
+            .update({ stock_ica: nuevoStock })
+            .eq('id', item.producto.id);
+        }
 
-        // Registrar movimiento de inventario (Kardex)
+        // Registrar movimiento de inventario (Kardex) con sede específica
         await supabase.from('movimientos_inventario').insert({
           producto_id: item.producto.id,
           tipo: 'SALIDA',
           cantidad: item.cantidad,
-          stock_anterior: item.producto.stock,
+          stock_anterior: stockPrev,
           stock_nuevo: nuevoStock,
-          motivo: `Venta Mostrador POS Ticket #${venta.codigoPedido}`,
+          sede: esHuancayo ? 'huancayo' : 'ica',
+          motivo: `Venta Mostrador POS Ticket #${venta.codigoPedido} (Sede ${ciudad})`,
           usuario_id: venta.cajeroId || '00000000-0000-0000-0000-000000000001',
           usuario_nombre: venta.cajeroNombre,
           referencia_id: venta.codigoPedido,

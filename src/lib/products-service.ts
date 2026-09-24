@@ -10,6 +10,8 @@ export interface CreateProductInput {
   precio_venta: number;
   precio_alumno?: number;
   stock: number;
+  stock_ica?: number;
+  stock_huancayo?: number;
   stock_minimo?: number;
   imagen_url?: string;
   destacado?: boolean;
@@ -17,7 +19,80 @@ export interface CreateProductInput {
 }
 
 // -------------------------------------------------------------------------
-// 1. Obtener todos los productos para el Panel de Administración
+// 1. Obtener productos paginados para el Panel de Administración (20 por página)
+// -------------------------------------------------------------------------
+export interface AdminProductsPaginadoParams {
+  pagina?: number;
+  porPagina?: number;
+  busqueda?: string;
+  categoriaId?: string;
+}
+
+export interface AdminProductsPaginadoRespuesta {
+  productos: Producto[];
+  total: number;
+  totalPaginas: number;
+  paginaActual: number;
+}
+
+export async function getAdminProductsPaginado(
+  params?: AdminProductsPaginadoParams
+): Promise<AdminProductsPaginadoRespuesta> {
+  const pagina = Math.max(1, params?.pagina || 1);
+  const porPagina = params?.porPagina || 20;
+  const desde = (pagina - 1) * porPagina;
+  const hasta = desde + porPagina - 1;
+
+  try {
+    let query = supabase
+      .from('productos')
+      .select('*, categoria:categorias(*)', { count: 'exact' });
+
+    if (params?.categoriaId && params.categoriaId !== 'todas') {
+      query = query.eq('categoria_id', params.categoriaId);
+    }
+
+    if (params?.busqueda && params.busqueda.trim()) {
+      const q = params.busqueda.trim();
+      query = query.or(`nombre.ilike.%${q}%,sku.ilike.%${q}%,descripcion.ilike.%${q}%`);
+    }
+
+    const { data, count, error } = await query
+      .order('creado_en', { ascending: false })
+      .range(desde, hasta);
+
+    if (error) {
+      console.error('Error al consultar productos paginados de Supabase:', error);
+      return {
+        productos: [],
+        total: 0,
+        totalPaginas: 1,
+        paginaActual: pagina,
+      };
+    }
+
+    const total = count || 0;
+    const totalPaginas = Math.max(1, Math.ceil(total / porPagina));
+
+    return {
+      productos: (data as unknown as Producto[]) || [],
+      total,
+      totalPaginas,
+      paginaActual: pagina,
+    };
+  } catch (err) {
+    console.error('Error inesperado al obtener productos paginados:', err);
+    return {
+      productos: [],
+      total: 0,
+      totalPaginas: 1,
+      paginaActual: pagina,
+    };
+  }
+}
+
+// -------------------------------------------------------------------------
+// 1.1 Obtener todos los productos (fallback o exportaciones)
 // -------------------------------------------------------------------------
 export async function getAdminProducts(): Promise<Producto[]> {
   try {
@@ -87,6 +162,10 @@ export async function createProduct(
       finalSku = `GAL-${nextNum}`;
     }
 
+    const stockIca = typeof input.stock_ica === 'number' ? input.stock_ica : (Number(input.stock) || 0);
+    const stockHuancayo = typeof input.stock_huancayo === 'number' ? input.stock_huancayo : 0;
+    const stockTotal = stockIca + stockHuancayo;
+
     const nuevoProducto = {
       nombre: input.nombre.trim(),
       sku: finalSku,
@@ -96,7 +175,9 @@ export async function createProduct(
       precio_compra: Number(input.precio_compra) || 0,
       precio_venta: Number(input.precio_venta) || 0,
       precio_alumno: input.precio_alumno ? Number(input.precio_alumno) : null,
-      stock: Math.max(0, parseInt(String(input.stock), 10) || 0),
+      stock: stockTotal,
+      stock_ica: stockIca,
+      stock_huancayo: stockHuancayo,
       stock_minimo: Math.max(1, parseInt(String(input.stock_minimo || 3), 10)),
       imagenes,
       destacado: Boolean(input.destacado),
@@ -135,6 +216,8 @@ export interface UpdateProductInput {
   precio_venta?: number;
   precio_alumno?: number | null;
   stock?: number;
+  stock_ica?: number;
+  stock_huancayo?: number;
   stock_minimo?: number;
   imagen_url?: string;
   destacado?: boolean;
@@ -170,7 +253,22 @@ export async function updateProduct(
     if (input.precio_alumno !== undefined) {
       updateData.precio_alumno = input.precio_alumno ? Number(input.precio_alumno) : null;
     }
-    if (input.stock !== undefined) updateData.stock = Math.max(0, parseInt(String(input.stock), 10) || 0);
+    if (input.stock_ica !== undefined) {
+      updateData.stock_ica = Math.max(0, parseInt(String(input.stock_ica), 10) || 0);
+    }
+    if (input.stock_huancayo !== undefined) {
+      updateData.stock_huancayo = Math.max(0, parseInt(String(input.stock_huancayo), 10) || 0);
+    }
+    if (input.stock !== undefined) {
+      updateData.stock = Math.max(0, parseInt(String(input.stock), 10) || 0);
+    } else if (input.stock_ica !== undefined || input.stock_huancayo !== undefined) {
+      // Si se actualiza stock_ica o stock_huancayo, aseguramos que stock consolidado se compute correctamente
+      const sIca = input.stock_ica !== undefined ? Math.max(0, parseInt(String(input.stock_ica), 10) || 0) : undefined;
+      const sHyo = input.stock_huancayo !== undefined ? Math.max(0, parseInt(String(input.stock_huancayo), 10) || 0) : undefined;
+      if (sIca !== undefined && sHyo !== undefined) {
+        updateData.stock = sIca + sHyo;
+      }
+    }
     if (input.stock_minimo !== undefined) {
       updateData.stock_minimo = Math.max(1, parseInt(String(input.stock_minimo || 3), 10));
     }

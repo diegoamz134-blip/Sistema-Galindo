@@ -8,7 +8,7 @@ import { Footer } from '@/components/layout/Footer';
 import { CartDrawer } from '@/components/shop/CartDrawer';
 import { useCart } from '@/context/CartContext';
 import { formatCurrency, generateWhatsAppLink } from '@/lib/utils';
-import { BUSINESS_INFO, TURNOS_CURSO_LABELS, SEDES, SedeId } from '@/lib/constants';
+import { BUSINESS_INFO, TURNOS_CURSO_LABELS, SEDES } from '@/lib/constants';
 import { Producto, Curso, TurnoOption } from '@/types/database';
 import { getCursosActivos, DEFAULT_TURNOS } from '@/lib/academia-service';
 
@@ -20,11 +20,23 @@ export default function CursosPage() {
   const [acordeonAbierto, setAcordeonAbierto] = useState<number | null>(0);
   const [temarioPage, setTemarioPage] = useState<number>(1);
 
+  const {
+    cartItems,
+    addToCart,
+    updateQuantity,
+    removeFromCart,
+    cartOpen,
+    setCartOpen,
+    sedeSeleccionada,
+    setSedeSeleccionada,
+  } = useCart();
+
   useEffect(() => {
     let isMounted = true;
     async function cargarCursos() {
+      setCargando(true);
       try {
-        const list = await getCursosActivos();
+        const list = await getCursosActivos(sedeSeleccionada);
         if (isMounted) {
           const items = list || [];
           setCursos(items);
@@ -33,6 +45,8 @@ export default function CursosPage() {
               const existe = items.some((c) => c.id === prev);
               return existe ? prev : items[0].id;
             });
+          } else {
+            setCursoSeleccionadoId('');
           }
         }
       } catch (err) {
@@ -45,24 +59,13 @@ export default function CursosPage() {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [sedeSeleccionada]);
 
   const cursoActivo = cursos.find((c) => c.id === cursoSeleccionadoId) || cursos[0];
   const turnosDisponibles: TurnoOption[] = cursoActivo?.turnos && cursoActivo.turnos.length > 0
     ? cursoActivo.turnos
     : DEFAULT_TURNOS;
   const turnoActivo = turnosDisponibles.find((t) => t.id === turnoSeleccionadoId) || turnosDisponibles[0];
-
-  const {
-    cartItems,
-    addToCart,
-    updateQuantity,
-    removeFromCart,
-    cartOpen,
-    setCartOpen,
-    sedeSeleccionada,
-    setSedeSeleccionada,
-  } = useCart();
 
   const sedeActual = SEDES[sedeSeleccionada] || SEDES['ica'];
   const [agregadoAnim, setAgregadoAnim] = useState(false);
@@ -76,13 +79,18 @@ export default function CursosPage() {
         }
       : undefined;
 
+    const mensualidad = turnoActivo?.costo_mensualidad || cursoActivo.costo_mensualidad;
+    const duracionStr = turnoActivo?.duracion_meses
+      ? `${turnoActivo.duracion_meses} meses (${turnoActivo.nombre})`
+      : `${cursoActivo.duracion_semanas} semanas (${cursoActivo.horas_academicas} horas académicas)`;
+
     const cursoProducto: Producto = {
       id: `curso-${cursoActivo.id}-${turnoActivo.id}`,
       sku: `MAT-${cursoActivo.id.toUpperCase()}-${turnoActivo.id.toUpperCase()}`,
       nombre: `Matrícula: ${cursoActivo.titulo} (${turnoActivo.nombre} - ${sedeActual.nombre})`,
       slug: `matricula-${cursoActivo.slug}-${turnoActivo.id.toLowerCase()}`,
       categoria_id: 'academia',
-      descripcion: `Matrícula para ${cursoActivo.titulo}. Turno: ${turnoActivo.nombre} (${turnoActivo.horario} - ${turnoActivo.dias}). Duración: ${cursoActivo.duracion_semanas} semanas (${cursoActivo.horas_academicas} horas académicas). Sede: ${sedeActual.nombre} (${sedeActual.direccion}).`,
+      descripcion: `Matrícula para ${cursoActivo.titulo}. Plan: ${turnoActivo.nombre}. Horarios: ${turnoActivo.horario} (${turnoActivo.dias || ''}). Duración: ${duracionStr}. Mensualidad: S/ ${mensualidad.toFixed(2)}. Sede: ${sedeActual.nombre} (${sedeActual.direccion}).`,
       precio_compra: 0,
       precio_venta: cursoActivo.costo_matricula,
       precio_alumno: cursoActivo.costo_matricula,
@@ -98,11 +106,12 @@ export default function CursosPage() {
 
     const matriculaMeta = {
       cursoId: cursoActivo.id,
-      cursoNombre: cursoActivo.titulo,
+      cursoNombre: `${cursoActivo.titulo} — ${turnoActivo.nombre}`,
       turno: (turnoActivo.id as 'MANANA' | 'TARDE' | 'NOCHE' | 'SABATINO') || 'MANANA',
       sede: sedeActual.nombre,
       costoMatricula: cursoActivo.costo_matricula,
-      totalCurso: cursoActivo.costo_total_contado || cursoActivo.costo_matricula * 3,
+      costoMensualidad: mensualidad,
+      totalCurso: cursoActivo.costo_total_contado || mensualidad * (turnoActivo.duracion_meses || 3),
     };
 
     addToCart(cursoProducto, false, coords, matriculaMeta, 'matricula');
@@ -114,14 +123,21 @@ export default function CursosPage() {
 
   const handleInscripcionWhatsApp = () => {
     if (!cursoActivo) return;
+    const mensualidad = turnoActivo?.costo_mensualidad || cursoActivo.costo_mensualidad;
+    const duracionStr = turnoActivo?.duracion_meses
+      ? `${turnoActivo.duracion_meses} meses`
+      : `${cursoActivo.duracion_semanas} semanas (${cursoActivo.horas_academicas} horas)`;
+
     let mensaje = `Hola Galindo Barber Academy (${sedeActual.nombre}).\nDeseo información y separar mi vacante para el curso:\n\n`;
     mensaje += `CURSO: ${cursoActivo.titulo}\n`;
-    mensaje += `TURNO: ${turnoActivo.nombre} (${turnoActivo.horario} - ${turnoActivo.dias})\n`;
-    mensaje += `DURACIÓN: ${cursoActivo.duracion_semanas} semanas (${cursoActivo.horas_academicas} horas académicas)\n`;
+    mensaje += `PLAN / MODALIDAD: ${turnoActivo.nombre}\n`;
+    mensaje += `HORARIOS: ${turnoActivo.horario}\n`;
+    if (turnoActivo.dias) mensaje += `DÍAS: ${turnoActivo.dias}\n`;
+    mensaje += `DURACIÓN: ${duracionStr}\n`;
     mensaje += `MATRÍCULA: S/ ${cursoActivo.costo_matricula.toFixed(2)}\n`;
-    mensaje += `MENSUALIDAD: S/ ${cursoActivo.costo_mensualidad.toFixed(2)}\n\n`;
-    mensaje += `SEDE ELEGIDA: ${sedeActual.nombre} (${sedeActual.direccionCompleta}).\n`;
-    mensaje += `¿Cuáles son los requisitos y cuentas bancarias (Yape/Plin/Banco) para realizar el abono de matrícula?`;
+    mensaje += `MENSUALIDAD: S/ ${mensualidad.toFixed(2)} cada mes\n\n`;
+    mensaje += `SEDE: ${sedeActual.nombre} (${sedeActual.direccionCompleta}).\n`;
+    mensaje += `¿Cuáles son los requisitos y números de cuenta para formalizar mi matrícula?`;
 
     const link = generateWhatsAppLink(sedeActual.whatsapp, mensaje);
     window.open(link, '_blank');
@@ -147,23 +163,30 @@ export default function CursosPage() {
       </section>
 
       {/* Selector de Cursos y Módulo Interactivo */}
-      <section className="py-12 max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 flex-1 w-full">
+      <section className="py-12 max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 flex-1 w-full space-y-8">
+
         {cargando ? (
           <div className="py-24 text-center text-zinc-400">
             <div className="w-8 h-8 border-2 border-black border-t-transparent rounded-full animate-spin mx-auto mb-3" />
-            <p className="text-xs font-semibold text-zinc-600">Consultando convocatorias disponibles...</p>
+            <p className="text-xs font-semibold text-zinc-600">Consultando convocatorias disponibles en {sedeActual.nombre}...</p>
           </div>
         ) : cursos.length === 0 ? (
-          <div className="max-w-xl mx-auto py-16 px-6 text-center rounded-3xl bg-zinc-50 border border-zinc-200 shadow-xs space-y-4 my-8">
+          <div className="max-w-xl mx-auto py-16 px-6 text-center rounded-3xl bg-zinc-50 border border-zinc-200 shadow-xs space-y-4 my-4">
             <div className="w-14 h-14 rounded-full bg-white text-zinc-600 flex items-center justify-center mx-auto shadow-xs border border-zinc-200">
               <GraduationCap className="w-7 h-7 text-zinc-700" />
             </div>
-            <div>
+            <div className="space-y-2">
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-mono font-bold bg-amber-100 text-amber-900 border border-amber-300">
+                <MapPin className="w-3.5 h-3.5 text-amber-700" />
+                <span>{sedeActual.nombre} ({sedeActual.ciudad})</span>
+              </span>
               <h3 className="text-lg font-black text-zinc-950 uppercase tracking-tight">
-                Próximamente Nuevas Convocatorias
+                Próximas Convocatorias en Sede {sedeActual.ciudad}
               </h3>
-              <p className="text-xs text-zinc-600 leading-relaxed mt-1">
-                Por el momento no hay cursos con inscripciones abiertas en la plataforma web. Estamos preparando las nuevas fechas y vacantes para el próximo ciclo en nuestras sedes de Ica y Huancayo.
+              <p className="text-xs text-zinc-600 leading-relaxed max-w-md mx-auto">
+                {sedeSeleccionada === 'huancayo'
+                  ? 'Actualmente las convocatorias con vacantes abiertas están en nuestra Sede Central de Ica. Estamos coordinando las nuevas fechas para las clases presenciales en Jr. Guido 654, Huancayo.'
+                  : 'Por el momento no hay cursos con inscripciones abiertas en la plataforma web. Estamos preparando las nuevas fechas y vacantes para el próximo ciclo.'}
               </p>
             </div>
             <div className="pt-2 flex flex-col sm:flex-row items-center justify-center gap-3">
@@ -172,26 +195,37 @@ export default function CursosPage() {
                 onClick={() => {
                   const link = generateWhatsAppLink(
                     sedeActual.whatsapp,
-                    `Hola Galindo Barber Academy (${sedeActual.nombre}). Quisiera saber cuándo inician las próximas convocatorias y cursos de barbería.`
+                    `Hola Galindo Barber Academy (${sedeActual.nombre}). Quisiera saber cuándo inician las próximas clases de barbería en ${sedeActual.ciudad}.`
                   );
                   window.open(link, '_blank');
                 }}
                 className="w-full sm:w-auto px-6 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs uppercase tracking-wider transition-all shadow-xs flex items-center justify-center gap-2 cursor-pointer"
               >
                 <MessageCircle className="w-4 h-4" />
-                <span>Consultar por WhatsApp</span>
+                <span>Consultar por WhatsApp {sedeActual.ciudad}</span>
               </button>
-              <Link
-                href="/tienda"
-                className="w-full sm:w-auto px-6 py-3 rounded-xl bg-black hover:bg-zinc-800 text-white font-bold text-xs uppercase tracking-wider transition-all shadow-xs flex items-center justify-center gap-2"
-              >
-                <Store className="w-4 h-4" />
-                <span>Ver Tienda Supply</span>
-              </Link>
+              {sedeSeleccionada === 'huancayo' ? (
+                <button
+                  type="button"
+                  onClick={() => setSedeSeleccionada('ica')}
+                  className="w-full sm:w-auto px-6 py-3 rounded-xl bg-black hover:bg-zinc-800 text-white font-bold text-xs uppercase tracking-wider transition-all shadow-xs flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <GraduationCap className="w-4 h-4" />
+                  <span>Ver Cursos en Sede Ica</span>
+                </button>
+              ) : (
+                <Link
+                  href="/tienda"
+                  className="w-full sm:w-auto px-6 py-3 rounded-xl bg-black hover:bg-zinc-800 text-white font-bold text-xs uppercase tracking-wider transition-all shadow-xs flex items-center justify-center gap-2"
+                >
+                  <Store className="w-4 h-4" />
+                  <span>Ver Tienda Supply</span>
+                </Link>
+              )}
             </div>
           </div>
         ) : cursoActivo ? (
-          <div className="space-y-12">
+          <div className="space-y-8">
             {/* Selector de Pestañas de Cursos */}
             <div className="flex border-b border-zinc-200 overflow-x-auto gap-2">
               {cursos.map((c) => {
@@ -228,7 +262,7 @@ export default function CursosPage() {
                     className="w-full h-full object-cover"
                   />
                   <div className="absolute top-3 left-3 bg-white/95 backdrop-blur-md px-2.5 py-1 rounded text-zinc-900 text-[11px] font-mono border border-zinc-200 shadow-sm">
-                    {cursoActivo.duracion_semanas} Semanas • {cursoActivo.horas_academicas} Horas
+                    {turnoActivo?.duracion_meses ? `${turnoActivo.duracion_meses} Meses` : `${cursoActivo.duracion_semanas} Semanas`} • Clases Presenciales
                   </div>
                 </div>
 
@@ -369,13 +403,20 @@ export default function CursosPage() {
               )}
             </div>
 
-            {/* Selector de Turno */}
+            {/* Selector de Turno u Opción de Estudio */}
             <div className="space-y-2 pt-4 border-t border-zinc-100">
-              <span className="text-[11px] font-mono uppercase tracking-wider text-zinc-400 block">
-                Selecciona tu Turno de Estudio
-              </span>
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-mono uppercase tracking-wider text-zinc-500 block font-bold">
+                  {cursoActivo.turnos && cursoActivo.turnos.some((t) => t.costo_mensualidad)
+                    ? 'Selecciona tu Modalidad y Duración:'
+                    : 'Selecciona tu Turno de Estudio:'}
+                </span>
+                <span className="text-[10px] font-mono text-zinc-400">
+                  {sedeActual.ciudad}
+                </span>
+              </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                 {turnosDisponibles.map((t) => {
                   const seleccionado = t.id === turnoActivo?.id;
                   return (
@@ -383,61 +424,39 @@ export default function CursosPage() {
                       key={t.id}
                       type="button"
                       onClick={() => setTurnoSeleccionadoId(t.id)}
-                      className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
+                      className={`p-3.5 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between ${
                         seleccionado
-                          ? 'border-black bg-zinc-950 text-white shadow-sm'
-                          : 'border-zinc-200 bg-white text-zinc-800 hover:border-zinc-300'
+                          ? 'border-black bg-zinc-950 text-white shadow-md'
+                          : 'border-zinc-200 bg-white text-zinc-800 hover:border-zinc-400 hover:bg-zinc-50'
                       }`}
                     >
-                      <p className="text-xs font-bold leading-tight">{t.nombre}</p>
-                      <p className={`text-[10px] mt-1 ${seleccionado ? 'text-zinc-300' : 'text-zinc-500'}`}>
-                        {t.horario}
-                      </p>
-                      {t.dias && (
-                        <p className={`text-[9px] mt-0.5 ${seleccionado ? 'text-zinc-400' : 'text-zinc-400'}`}>
-                          {t.dias}
+                      <div className="space-y-1">
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="text-xs font-bold leading-tight">{t.nombre}</p>
+                          {t.costo_mensualidad && (
+                            <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded shrink-0 ${
+                              seleccionado ? 'bg-amber-400 text-black' : 'bg-zinc-100 text-zinc-900 border border-zinc-200'
+                            }`}>
+                              S/ {t.costo_mensualidad.toFixed(0)}/mes
+                            </span>
+                          )}
+                        </div>
+                        {t.dias && (
+                          <p className={`text-[11px] font-medium ${seleccionado ? 'text-zinc-200' : 'text-zinc-700'}`}>
+                            {t.dias}
+                          </p>
+                        )}
+                        <p className={`text-[10px] leading-relaxed ${seleccionado ? 'text-zinc-400' : 'text-zinc-500'}`}>
+                          {t.horario}
                         </p>
-                      )}
-                      <div className="mt-2 pt-2 border-t border-zinc-200/40 flex items-center justify-between text-[10px] font-mono">
-                        <span className={seleccionado ? 'text-zinc-300' : 'text-zinc-500'}>Vacantes:</span>
+                      </div>
+
+                      <div className="mt-2.5 pt-2 border-t border-zinc-200/40 flex items-center justify-between text-[10px] font-mono">
+                        <span className={seleccionado ? 'text-zinc-400' : 'text-zinc-500'}>Vacantes:</span>
                         <span className={`font-bold ${seleccionado ? 'text-emerald-400' : 'text-zinc-950'}`}>
-                          {t.vacantesDisponibles} libres
+                          {t.vacantesDisponibles} cupos libres
                         </span>
                       </div>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Selector de Sede para el Curso */}
-            <div className="space-y-2 pt-4 border-t border-zinc-100">
-              <span className="text-[11px] font-mono uppercase tracking-wider text-zinc-400 block">
-                Selecciona la Sede donde deseas Estudiar:
-              </span>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                {(Object.keys(SEDES) as SedeId[]).map((key) => {
-                  const s = SEDES[key];
-                  const isSelected = sedeSeleccionada === key;
-                  return (
-                    <button
-                      key={key}
-                      type="button"
-                      onClick={() => setSedeSeleccionada(key)}
-                      className={`p-3 rounded-xl border text-left transition-all cursor-pointer flex items-center justify-between ${
-                        isSelected
-                          ? 'border-black bg-zinc-950 text-white shadow-xs'
-                          : 'border-zinc-200 bg-white text-zinc-800 hover:border-zinc-300'
-                      }`}
-                    >
-                      <div>
-                        <p className="text-xs font-bold leading-tight">{s.nombre}</p>
-                        <p className={`text-[10px] mt-0.5 ${isSelected ? 'text-zinc-300' : 'text-zinc-500'}`}>
-                          {s.direccion} ({s.ciudad})
-                        </p>
-                      </div>
-                      {isSelected && <Check className="w-4 h-4 text-emerald-400 shrink-0" />}
                     </button>
                   );
                 })}
@@ -449,15 +468,15 @@ export default function CursosPage() {
               <div className="space-y-1">
                 <div className="flex items-baseline gap-4">
                   <div>
-                    <span className="text-[10px] text-zinc-500 block">Matrícula Hoy</span>
+                    <span className="text-[10px] text-zinc-500 block font-mono">Matrícula Hoy</span>
                     <span className="text-lg font-bold text-zinc-950 font-mono">
                       {formatCurrency(cursoActivo.costo_matricula)}
                     </span>
                   </div>
                   <div>
-                    <span className="text-[10px] text-zinc-500 block">Mensualidad</span>
+                    <span className="text-[10px] text-zinc-500 block font-mono">Mensualidad</span>
                     <span className="text-lg font-bold text-zinc-950 font-mono">
-                      {formatCurrency(cursoActivo.costo_mensualidad)}
+                      {formatCurrency(turnoActivo?.costo_mensualidad || cursoActivo.costo_mensualidad)}
                     </span>
                   </div>
                 </div>

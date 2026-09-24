@@ -42,7 +42,9 @@ export interface Producto {
   precio_compra: number; // Costo para la barbería
   precio_venta: number;  // Precio al público
   precio_alumno?: number; // Precio con descuento especial para alumnos matriculados
-  stock: number;
+  stock: number; // Stock total (stock_ica + stock_huancayo)
+  stock_ica?: number; // Stock físico en Sede Ica
+  stock_huancayo?: number; // Stock físico en Sede Huancayo
   stock_minimo: number;  // Umbral para alerta de bajo stock
   imagenes: string[];
   destacado: boolean;    // Para mostrar en la home / productos top
@@ -53,7 +55,7 @@ export interface Producto {
   actualizado_en: string;
 }
 
-export type TipoMovimientoInventario = 'ENTRADA' | 'SALIDA' | 'AJUSTE' | 'USO_CLASE';
+export type TipoMovimientoInventario = 'ENTRADA' | 'SALIDA' | 'AJUSTE' | 'USO_CLASE' | 'TRASLADO_SEDE';
 
 export interface MovimientoInventario {
   id: string;
@@ -64,6 +66,8 @@ export interface MovimientoInventario {
   stock_anterior: number;
   stock_nuevo: number;
   motivo: string; // Ej: "Compra a distribuidor Wahl", "Venta Ticket #012", "Uso en módulo práctico de corte"
+  sede?: string; // 'ica' | 'huancayo'
+  sede_destino?: string; // Para traslados entre sedes
   usuario_id: string;
   usuario_nombre?: string;
   referencia_id?: string; // ID del pedido o compra asociada
@@ -120,6 +124,8 @@ export interface TurnoOption {
   horario: string;
   dias?: string;
   vacantesDisponibles: number;
+  duracion_meses?: number;
+  costo_mensualidad?: number;
 }
 
 export interface Curso {
@@ -137,6 +143,7 @@ export interface Curso {
   descripcion_kit?: string;
   imagen_url: string;
   activo: boolean;
+  sede?: 'ica' | 'huancayo' | 'ambas' | 'todas' | string;
   turnos?: TurnoOption[];
   beneficios?: any[];
 }

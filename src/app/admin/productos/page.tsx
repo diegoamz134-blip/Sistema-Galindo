@@ -14,11 +14,14 @@ import {
   MoreVertical,
   Pencil,
   AlertTriangle,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react';
 import { formatCurrency } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
 import { Producto, Categoria } from '@/types/database';
 import {
+  getAdminProductsPaginado,
   getAdminProducts,
   getCategories,
   createProduct,
@@ -87,14 +90,35 @@ async function comprimirFotoProducto(
   });
 }
 
+const POR_PAGINA = 20;
+
+function generarBotonesPaginacion(actual: number, total: number): (number | string)[] {
+  if (total <= 7) {
+    return Array.from({ length: total }, (_, i) => i + 1);
+  }
+  if (actual <= 4) {
+    return [1, 2, 3, 4, 5, '...', total];
+  }
+  if (actual >= total - 3) {
+    return [1, '...', total - 4, total - 3, total - 2, total - 1, total];
+  }
+  return [1, '...', actual - 1, actual, actual + 1, '...', total];
+}
+
 export default function AdminProductosPage() {
   const [productos, setProductos] = useState<Producto[]>([]);
   const [categorias, setCategorias] = useState<Categoria[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [busqueda, setBusqueda] = useState('');
+  const [debouncedBusqueda, setDebouncedBusqueda] = useState('');
   const [categoriaFiltro, setCategoriaFiltro] = useState('todas');
   const [showModalNuevo, setShowModalNuevo] = useState(false);
+
+  // Paginación inteligente (20 productos por página)
+  const [pagina, setPagina] = useState(1);
+  const [totalProductos, setTotalProductos] = useState(0);
+  const [totalPaginas, setTotalPaginas] = useState(1);
 
   // Formulario Nuevo Producto
   const [nombre, setNombre] = useState('');
@@ -102,7 +126,8 @@ export default function AdminProductosPage() {
   const [categoriaId, setCategoriaId] = useState('');
   const [precioCompra, setPrecioCompra] = useState('');
   const [precioVenta, setPrecioVenta] = useState('');
-  const [stock, setStock] = useState('');
+  const [stockIca, setStockIca] = useState('');
+  const [stockHuancayo, setStockHuancayo] = useState('');
   const [stockMinimo, setStockMinimo] = useState('3');
   const [imagenUrl, setImagenUrl] = useState('');
   const [imagenPesoKb, setImagenPesoKb] = useState<number | null>(null);
@@ -123,46 +148,58 @@ export default function AdminProductosPage() {
   const [deletingProducto, setDeletingProducto] = useState<Producto | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
+  // Debounce inteligente para búsqueda en la base de datos (250ms)
   useEffect(() => {
-    let isMounted = true;
-    async function init() {
+    const timer = setTimeout(() => {
+      setDebouncedBusqueda(busqueda.trim());
+      setPagina(1);
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [busqueda]);
+
+  // Cargar datos paginados (exactamente 20 por página)
+  const cargarDatos = useCallback(
+    async (targetPage = pagina, silencioso = false) => {
+      if (!silencioso) setIsLoading(true);
       try {
-        const [prods, cats] = await Promise.all([getAdminProducts(), getCategories()]);
-        if (!isMounted) return;
-        setProductos(prods);
-        setCategorias(cats);
-        if (cats.length > 0) {
+        const [resPaginado, cats] = await Promise.all([
+          getAdminProductsPaginado({
+            pagina: targetPage,
+            porPagina: POR_PAGINA,
+            busqueda: debouncedBusqueda,
+            categoriaId: categoriaFiltro,
+          }),
+          categorias.length > 0 ? Promise.resolve(categorias) : getCategories(),
+        ]);
+
+        setProductos(resPaginado.productos);
+        setTotalProductos(resPaginado.total);
+        setTotalPaginas(resPaginado.totalPaginas);
+        if (categorias.length === 0 && cats.length > 0) {
+          setCategorias(cats);
           setCategoriaId((curr) => curr || cats[0].id);
         }
       } catch (err) {
-        console.error('Error al cargar datos:', err);
+        console.error('Error al cargar datos paginados:', err);
       } finally {
-        if (isMounted) setIsLoading(false);
+        setIsLoading(false);
+        if (!silencioso) setIsRefreshing(false);
       }
-    }
+    },
+    [pagina, debouncedBusqueda, categoriaFiltro, categorias]
+  );
 
-    init();
-    return () => {
-      isMounted = false;
-    };
-  }, []);
+  useEffect(() => {
+    cargarDatos(pagina, false);
+  }, [pagina, debouncedBusqueda, categoriaFiltro]);
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
-    try {
-      const [prods, cats] = await Promise.all([getAdminProducts(), getCategories()]);
-      setProductos(prods);
-      setCategorias(cats);
-    } catch (err) {
-      console.error('Error al recargar:', err);
-    } finally {
-      setIsRefreshing(false);
-    }
+    await cargarDatos(pagina, true);
   };
 
   // Sincronización en Tiempo Real (Supabase Realtime WebSockets + re-enfoque)
   useEffect(() => {
-    // 1. Canal WebSocket en vivo para escuchar cambios de productos y categorías
     const channel = supabase
       .channel('admin_productos_live_channel')
       .on(
@@ -181,7 +218,6 @@ export default function AdminProductosPage() {
       )
       .subscribe();
 
-    // 2. Sincronización automática al volver a la pestaña o desbloquear el teléfono
     const onFocus = () => handleRefresh();
     window.addEventListener('focus', onFocus);
 
@@ -189,21 +225,13 @@ export default function AdminProductosPage() {
       supabase.removeChannel(channel);
       window.removeEventListener('focus', onFocus);
     };
-  }, []);
+  }, [pagina, debouncedBusqueda, categoriaFiltro]);
 
-  // Generador 100% automático de SKU correlativo único (ej: GAL-0001, GAL-0002)
-  const generarSkuAutomatico = useCallback((prods: Producto[] = productos) => {
-    let maxNum = prods.length;
-    prods.forEach((p) => {
-      const match = p.sku?.match(/^(?:GAL|PROD)-(\d+)$/i);
-      if (match) {
-        const num = parseInt(match[1], 10);
-        if (num > maxNum) maxNum = num;
-      }
-    });
-    const nextNum = String(maxNum + 1).padStart(4, '0');
+  // Generador 100% automático de SKU correlativo único
+  const generarSkuAutomatico = useCallback(() => {
+    const nextNum = String((totalProductos || productos.length) + 1).padStart(4, '0');
     return `GAL-${nextNum}`;
-  }, [productos]);
+  }, [totalProductos, productos]);
 
   const abrirModalNuevo = () => {
     setEditingProducto(null);
@@ -211,14 +239,15 @@ export default function AdminProductosPage() {
     setNombre('');
     setPrecioCompra('');
     setPrecioVenta('');
-    setStock('');
+    setStockIca('');
+    setStockHuancayo('0');
     setStockMinimo('3');
     setImagenUrl('');
     setImagenPesoKb(null);
     setDescripcion('');
     setDestacado(false);
     setEnOferta(false);
-    setSku(generarSkuAutomatico(productos));
+    setSku(generarSkuAutomatico());
     setShowModalNuevo(true);
   };
 
@@ -231,7 +260,8 @@ export default function AdminProductosPage() {
     setCategoriaId(p.categoria_id || (categorias[0]?.id ?? ''));
     setPrecioCompra(String(p.precio_compra ?? '0'));
     setPrecioVenta(String(p.precio_venta ?? '0'));
-    setStock(String(p.stock ?? '0'));
+    setStockIca(String(p.stock_ica ?? p.stock ?? '0'));
+    setStockHuancayo(String(p.stock_huancayo ?? '0'));
     setStockMinimo(String(p.stock_minimo ?? '3'));
     setImagenUrl(p.imagenes && p.imagenes.length > 0 ? p.imagenes[0] : '');
     setImagenPesoKb(null);
@@ -300,7 +330,10 @@ export default function AdminProductosPage() {
     setFormError(null);
     setIsSaving(true);
 
-    const finalSku = sku.trim() || generarSkuAutomatico(productos);
+    const finalSku = sku.trim() || generarSkuAutomatico();
+    const parsedStockIca = Math.max(0, parseInt(stockIca, 10) || 0);
+    const parsedStockHyo = Math.max(0, parseInt(stockHuancayo, 10) || 0);
+    const totalConsolidado = parsedStockIca + parsedStockHyo;
 
     if (editingProducto) {
       const updateData: UpdateProductInput = {
@@ -311,7 +344,9 @@ export default function AdminProductosPage() {
         precio_compra: parseFloat(precioCompra) || 0,
         precio_venta: parseFloat(precioVenta) || 0,
         precio_alumno: null,
-        stock: parseInt(stock, 10) || 0,
+        stock_ica: parsedStockIca,
+        stock_huancayo: parsedStockHyo,
+        stock: totalConsolidado,
         stock_minimo: parseInt(stockMinimo, 10) || 3,
         imagen_url: imagenUrl || undefined,
         destacado,
@@ -339,7 +374,9 @@ export default function AdminProductosPage() {
         descripcion: descripcion || `${nombre} para uso profesional de barbería`,
         precio_compra: parseFloat(precioCompra) || 0,
         precio_venta: parseFloat(precioVenta) || 0,
-        stock: parseInt(stock, 10) || 0,
+        stock_ica: parsedStockIca,
+        stock_huancayo: parsedStockHyo,
+        stock: totalConsolidado,
         stock_minimo: parseInt(stockMinimo, 10) || 3,
         imagen_url: imagenUrl || undefined,
         destacado,
@@ -359,7 +396,8 @@ export default function AdminProductosPage() {
         setSku('');
         setPrecioCompra('');
         setPrecioVenta('');
-        setStock('');
+        setStockIca('');
+        setStockHuancayo('0');
         setStockMinimo('3');
         setImagenUrl('');
         setImagenPesoKb(null);
@@ -379,13 +417,10 @@ export default function AdminProductosPage() {
     setIsSaving(false);
   };
 
-  const productosFiltrados = productos.filter((p) => {
-    const coincideTexto =
-      p.nombre.toLowerCase().includes(busqueda.toLowerCase()) ||
-      p.sku.toLowerCase().includes(busqueda.toLowerCase());
-    const coincideCat = categoriaFiltro === 'todas' || p.categoria_id === categoriaFiltro;
-    return coincideTexto && coincideCat;
-  });
+  const productosFiltrados = productos;
+
+  const primerItemVisible = totalProductos === 0 ? 0 : (pagina - 1) * POR_PAGINA + 1;
+  const ultimoItemVisible = Math.min(pagina * POR_PAGINA, totalProductos);
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-12">
@@ -414,7 +449,7 @@ export default function AdminProductosPage() {
               Catálogo de Productos & Inventario
             </h1>
             <span className="px-2 py-0.5 rounded-md bg-zinc-100 text-zinc-700 text-xs font-mono font-semibold">
-              {productos.length} {productos.length === 1 ? 'producto' : 'productos'}
+              {totalProductos} {totalProductos === 1 ? 'producto' : 'productos'}
             </span>
           </div>
           <p className="text-xs text-zinc-500 mt-1">
@@ -469,18 +504,18 @@ export default function AdminProductosPage() {
 
         <select
           value={categoriaFiltro}
-          onChange={(e) => setCategoriaFiltro(e.target.value)}
+          onChange={(e) => {
+            setCategoriaFiltro(e.target.value);
+            setPagina(1);
+          }}
           className="px-3.5 py-2 rounded-xl bg-white border border-zinc-200 text-zinc-700 text-xs focus:border-black outline-none shadow-xs cursor-pointer font-medium"
         >
-          <option value="todas">Todas las categorías ({productos.length})</option>
-          {categorias.map((cat) => {
-            const count = productos.filter((p) => p.categoria_id === cat.id).length;
-            return (
-              <option key={cat.id} value={cat.id}>
-                {cat.nombre} ({count})
-              </option>
-            );
-          })}
+          <option value="todas">Todas las categorías ({totalProductos})</option>
+          {categorias.map((cat) => (
+            <option key={cat.id} value={cat.id}>
+              {cat.nombre}
+            </option>
+          ))}
         </select>
       </div>
 
@@ -520,7 +555,8 @@ export default function AdminProductosPage() {
             )}
           </div>
         ) : (
-          <div className="overflow-x-auto min-h-[260px] pb-12 w-full">
+          <>
+            <div className="overflow-x-auto min-h-[260px] pb-6 w-full">
             <table className="w-full text-left text-xs min-w-[700px]">
               <thead className="bg-zinc-50/80 text-zinc-500 uppercase tracking-wider border-b border-zinc-200">
                 <tr>
@@ -577,15 +613,20 @@ export default function AdminProductosPage() {
                         {formatCurrency(p.precio_venta)}
                       </td>
                       <td className="px-5 py-3.5 text-center">
-                        <span
-                          className={`inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-mono border ${
-                            stockBajo
-                              ? 'border-amber-300 bg-amber-50 text-amber-800 font-bold'
-                              : 'border-zinc-200 bg-zinc-50 text-zinc-700'
-                          }`}
-                        >
-                          {p.stock} un.
-                        </span>
+                        <div className="inline-flex flex-col items-center">
+                          <span
+                            className={`inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-mono border ${
+                              stockBajo
+                                ? 'border-amber-300 bg-amber-50 text-amber-800 font-bold'
+                                : 'border-zinc-200 bg-zinc-50 text-zinc-700'
+                            }`}
+                          >
+                            {p.stock} un.
+                          </span>
+                          <span className="text-[10px] font-mono text-zinc-400 mt-1">
+                            ICA: <b className="text-zinc-700">{p.stock_ica ?? p.stock}</b> • HYO: <b className="text-zinc-700">{p.stock_huancayo ?? 0}</b>
+                          </span>
+                        </div>
                       </td>
                       <td className="px-5 py-3.5 text-center">
                         <span className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200/50">
@@ -646,6 +687,62 @@ export default function AdminProductosPage() {
               </tbody>
             </table>
           </div>
+
+          {/* Barra de Paginación Inteligente (20 productos por página) */}
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-5 py-3.5 bg-zinc-50/80 border-t border-zinc-200 text-xs">
+            <div className="text-zinc-500 font-medium">
+              Mostrando <span className="font-bold text-zinc-900">{primerItemVisible}</span> a{' '}
+              <span className="font-bold text-zinc-900">{ultimoItemVisible}</span> de{' '}
+              <span className="font-bold text-zinc-900 font-mono">{totalProductos}</span> productos
+            </div>
+
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => setPagina((prev) => Math.max(1, prev - 1))}
+                disabled={pagina <= 1 || isLoading}
+                className="px-3 py-1.5 rounded-lg border border-zinc-200 bg-white hover:bg-zinc-100 text-zinc-700 disabled:opacity-40 disabled:cursor-not-allowed font-medium transition-all shadow-2xs flex items-center gap-1 cursor-pointer"
+              >
+                <ChevronLeft className="w-3.5 h-3.5" />
+                <span>Anterior</span>
+              </button>
+
+              <div className="flex items-center gap-1">
+                {generarBotonesPaginacion(pagina, totalPaginas).map((p, idx) =>
+                  p === '...' ? (
+                    <span key={`dots-${idx}`} className="px-1.5 text-zinc-400 font-mono">
+                      ...
+                    </span>
+                  ) : (
+                    <button
+                      key={`page-${p}`}
+                      type="button"
+                      onClick={() => setPagina(Number(p))}
+                      disabled={isLoading}
+                      className={`min-w-7 h-7 px-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                        pagina === p
+                          ? 'bg-zinc-950 text-white shadow-2xs'
+                          : 'bg-white border border-zinc-200 text-zinc-700 hover:bg-zinc-100'
+                      }`}
+                    >
+                      {p}
+                    </button>
+                  )
+                )}
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setPagina((prev) => Math.min(totalPaginas, prev + 1))}
+                disabled={pagina >= totalPaginas || isLoading}
+                className="px-3 py-1.5 rounded-lg border border-zinc-200 bg-white hover:bg-zinc-100 text-zinc-700 disabled:opacity-40 disabled:cursor-not-allowed font-medium transition-all shadow-2xs flex items-center gap-1 cursor-pointer"
+              >
+                <span>Siguiente</span>
+                <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+        </>
         )}
       </div>
 
@@ -787,36 +884,164 @@ export default function AdminProductosPage() {
                 </div>
               </div>
 
-              {/* Stock Inicial y Mínimo */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                <div>
-                  <label className="block font-semibold text-zinc-700 mb-1">
-                    Stock Inicial *
-                  </label>
-                  <input
-                    type="number"
-                    min="0"
-                    required
-                    placeholder="0"
-                    value={stock}
-                    onChange={(e) => setStock(e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-50 border border-zinc-300 text-zinc-900 font-mono outline-none focus:border-black focus:bg-white transition-all text-xs"
-                  />
+              {/* Stock Multi-Sede (Ica y Huancayo) y Mínimo */}
+              <div className="space-y-3 p-4 rounded-2xl bg-zinc-50 border border-zinc-200">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <span className="text-[11px] font-bold text-zinc-900 uppercase tracking-wider block">
+                      Inventario Físico por Sede
+                    </span>
+                    <span className="text-[10px] text-zinc-500">
+                      Asigna el stock según la tienda donde tengas mercadería física disponible
+                    </span>
+                  </div>
+                  <span className="text-[11px] font-mono font-semibold px-2.5 py-1 rounded-lg bg-white border border-zinc-200 text-zinc-800 shadow-2xs">
+                    Total Consolidado:{' '}
+                    <b className="text-black font-black">
+                      {(parseInt(stockIca, 10) || 0) + (parseInt(stockHuancayo, 10) || 0)} un.
+                    </b>
+                  </span>
                 </div>
 
-                <div>
-                  <label className="block font-semibold text-zinc-700 mb-1">
-                    Alerta Stock Mínimo
-                  </label>
-                  <input
-                    type="number"
-                    min="1"
-                    placeholder="3"
-                    value={stockMinimo}
-                    onChange={(e) => setStockMinimo(e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-50 border border-zinc-300 text-zinc-900 font-mono outline-none focus:border-black focus:bg-white transition-all text-xs"
-                  />
+                {/* Botones de Asignación Rápida */}
+                <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                  <span className="text-[10px] uppercase font-bold text-zinc-400 mr-1">Destinar a:</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setStockHuancayo('0');
+                      if (stockIca === '0' || !stockIca) setStockIca('10');
+                    }}
+                    className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer shadow-2xs ${
+                      (parseInt(stockIca, 10) || 0) > 0 && (parseInt(stockHuancayo, 10) || 0) === 0
+                        ? 'bg-zinc-950 text-white'
+                        : 'bg-white border border-zinc-200 text-zinc-700 hover:border-black'
+                    }`}
+                  >
+                    Exclusivo Ica
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setStockIca('0');
+                      if (stockHuancayo === '0' || !stockHuancayo) setStockHuancayo('10');
+                    }}
+                    className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer shadow-2xs ${
+                      (parseInt(stockIca, 10) || 0) === 0 && (parseInt(stockHuancayo, 10) || 0) > 0
+                        ? 'bg-zinc-950 text-white'
+                        : 'bg-white border border-zinc-200 text-zinc-700 hover:border-black'
+                    }`}
+                  >
+                    Exclusivo Huancayo
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (stockIca === '0' || !stockIca) setStockIca('5');
+                      if (stockHuancayo === '0' || !stockHuancayo) setStockHuancayo('5');
+                    }}
+                    className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer shadow-2xs ${
+                      (parseInt(stockIca, 10) || 0) > 0 && (parseInt(stockHuancayo, 10) || 0) > 0
+                        ? 'bg-zinc-950 text-white'
+                        : 'bg-white border border-zinc-200 text-zinc-700 hover:border-black'
+                    }`}
+                  >
+                    Ambas Sedes
+                  </button>
                 </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <label className="block font-bold text-zinc-800 mb-1 text-xs">
+                      Stock Sede Ica *
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      required
+                      placeholder="0"
+                      value={stockIca}
+                      onChange={(e) => setStockIca(e.target.value)}
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-white border border-zinc-300 text-zinc-900 font-mono font-bold outline-none focus:border-black transition-all text-xs"
+                    />
+                    <span className="text-[10px] text-zinc-400 mt-1 block">Calle Bolívar 536</span>
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-zinc-800 mb-1 text-xs">
+                      Stock Sede Huancayo *
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      required
+                      placeholder="0"
+                      value={stockHuancayo}
+                      onChange={(e) => setStockHuancayo(e.target.value)}
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-white border border-zinc-300 text-zinc-900 font-mono font-bold outline-none focus:border-black transition-all text-xs"
+                    />
+                    <span className="text-[10px] text-zinc-400 mt-1 block">Jr. Guido 654</span>
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-zinc-800 mb-1 text-xs">
+                      Alerta Stock Mínimo
+                    </label>
+                    <input
+                      type="number"
+                      min="1"
+                      placeholder="3"
+                      value={stockMinimo}
+                      onChange={(e) => setStockMinimo(e.target.value)}
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-white border border-zinc-300 text-zinc-900 font-mono outline-none focus:border-black transition-all text-xs"
+                    />
+                    <span className="text-[10px] text-zinc-400 mt-1 block">Aviso para reabastecer</span>
+                  </div>
+                </div>
+
+                {/* Explicación Dinámica en Tiempo Real */}
+                {(() => {
+                  const numIca = parseInt(stockIca, 10) || 0;
+                  const numHyo = parseInt(stockHuancayo, 10) || 0;
+                  if (numIca > 0 && numHyo === 0) {
+                    return (
+                      <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs">
+                        <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shrink-0 ring-2 ring-emerald-200" />
+                        <span>
+                          Este producto aparecerá <strong>únicamente en Sede Ica</strong> ({numIca} un.). En Huancayo no se mostrará.
+                        </span>
+                      </div>
+                    );
+                  }
+                  if (numIca === 0 && numHyo > 0) {
+                    return (
+                      <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-blue-50 border border-blue-200 text-blue-900 text-xs">
+                        <span className="w-2.5 h-2.5 rounded-full bg-blue-500 shrink-0 ring-2 ring-blue-200" />
+                        <span>
+                          Este producto aparecerá <strong>únicamente en Sede Huancayo</strong> ({numHyo} un.). En Ica no se mostrará.
+                        </span>
+                      </div>
+                    );
+                  }
+                  if (numIca > 0 && numHyo > 0) {
+                    return (
+                      <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-purple-50 border border-purple-200 text-purple-900 text-xs">
+                        <span className="w-2.5 h-2.5 rounded-full bg-purple-500 shrink-0 ring-2 ring-purple-200" />
+                        <span>
+                          Este producto estará <strong>disponible en ambas sedes</strong> ({numIca} en Ica y {numHyo} en Huancayo) con inventarios independientes.
+                        </span>
+                      </div>
+                    );
+                  }
+                  return (
+                    <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-zinc-100 border border-zinc-200 text-zinc-600 text-xs">
+                      <span className="w-2.5 h-2.5 rounded-full bg-zinc-400 shrink-0" />
+                      <span>
+                        Coloca la cantidad en la sede donde tengas mercadería. La sede que tenga <strong>0</strong> no mostrará el producto en la tienda ni en el mostrador.
+                      </span>
+                    </div>
+                  );
+                })()}
               </div>
 
               {/* Selector de Imagen Comprimida desde Galería */}

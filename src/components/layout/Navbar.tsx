@@ -3,9 +3,10 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
-import { ShoppingCart, Menu, X } from 'lucide-react';
-import { BUSINESS_INFO } from '@/lib/constants';
+import { ShoppingCart, Menu, X, MapPin } from 'lucide-react';
+import { BUSINESS_INFO, SEDES, SedeId } from '@/lib/constants';
 import { useCart } from '@/context/CartContext';
+import { SedeSelector } from '@/components/layout/SedeSelector';
 
 interface NavbarProps {
   cartItemCount?: number;
@@ -14,45 +15,20 @@ interface NavbarProps {
 
 export function Navbar({ cartItemCount, onOpenCart }: NavbarProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const { totalItems, setCartOpen, isCartBumping } = useCart();
+  const { totalItems, setCartOpen, isCartBumping, sedeSeleccionada, setSedeSeleccionada } = useCart();
 
   const count = cartItemCount !== undefined ? cartItemCount : totalItems;
   const handleOpenCart = onOpenCart || (() => setCartOpen(true));
 
   return (
     <header className="sticky top-0 z-40 w-full border-b border-zinc-200 bg-white/95 backdrop-blur-md">
-      {/* Top Banner sutil */}
-      <div className="hidden md:flex items-center justify-between px-6 py-2 text-xs text-zinc-600 bg-zinc-50 border-b border-zinc-200">
-        <div className="flex items-center gap-4">
-          <span className="flex items-center gap-1.5 font-medium text-zinc-700">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-            <span>Sede Ica: Calle Bolívar 536 (WA: 914 614 424)</span>
-          </span>
-          <span className="text-zinc-300">•</span>
-          <span className="flex items-center gap-1.5 font-medium text-zinc-700">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-            <span>Sede Huancayo: Jr. Guido 654 (WA: 967 577 215)</span>
-          </span>
-        </div>
-        <div className="flex items-center gap-4">
-          <span className="text-zinc-600">Ciclo Académico 2026</span>
-          <span className="text-zinc-300">|</span>
-          <Link
-            href="/admin"
-            className="text-zinc-900 hover:text-black transition-colors font-semibold"
-          >
-            Panel Administrativo
-          </Link>
-        </div>
-      </div>
-
       {/* Main Navbar */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-20">
+        <div className="flex items-center justify-between h-16 sm:h-20">
           
           {/* Logo Galindo Oficial */}
-          <Link href="/" className="flex items-center gap-3 group">
-            <div className="relative w-12 h-12 rounded-full overflow-hidden border border-zinc-200 shadow-sm shrink-0">
+          <Link href="/" className="flex items-center gap-2.5 sm:gap-3 group">
+            <div className="relative w-10 h-10 sm:w-12 sm:h-12 rounded-full overflow-hidden border border-zinc-200 shadow-sm shrink-0">
               <img
                 src="/logo.jpg"
                 alt="Galindo Barber Logo"
@@ -60,10 +36,10 @@ export function Navbar({ cartItemCount, onOpenCart }: NavbarProps) {
               />
             </div>
             <div>
-              <span className="text-lg font-bold tracking-tight text-zinc-950 block uppercase leading-none">
+              <span className="text-base sm:text-lg font-bold tracking-tight text-zinc-950 block uppercase leading-none">
                 Galindo Barber
               </span>
-              <span className="text-[11px] tracking-widest text-zinc-500 uppercase block mt-1">
+              <span className="text-[10px] sm:text-[11px] tracking-widest text-zinc-500 uppercase block mt-0.5 sm:mt-1">
                 Academy & Supply • Ica & Huancayo
               </span>
             </div>
@@ -92,7 +68,12 @@ export function Navbar({ cartItemCount, onOpenCart }: NavbarProps) {
           </nav>
 
           {/* Acciones Derecha */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2.5 sm:gap-3">
+            {/* Selector de Sede Elegante y Accesible (Solo Desktop) */}
+            <div className="hidden md:block">
+              <SedeSelector variant="dropdown" showDetails />
+            </div>
+
             {/* Botón Carrito interactivo con animación reactiva de impacto */}
             <motion.button
               id="navbar-cart-button"
@@ -130,7 +111,7 @@ export function Navbar({ cartItemCount, onOpenCart }: NavbarProps) {
             {/* Botón Matrícula */}
             <Link
               href="/cursos"
-              className="hidden sm:inline-flex items-center px-4 py-2 rounded-lg text-xs font-semibold bg-black text-white hover:bg-zinc-800 transition-all uppercase tracking-wider"
+              className="hidden lg:inline-flex items-center px-4 py-2 rounded-lg text-xs font-semibold bg-black text-white hover:bg-zinc-800 transition-all uppercase tracking-wider"
             >
               Matrícula 2026
             </Link>
@@ -138,7 +119,7 @@ export function Navbar({ cartItemCount, onOpenCart }: NavbarProps) {
             {/* Toggle Móvil */}
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="md:hidden p-2 text-zinc-600 hover:text-black"
+              className="md:hidden p-2 text-zinc-600 hover:text-black cursor-pointer rounded-lg hover:bg-zinc-100"
               aria-label="Abrir menú"
             >
               {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
@@ -148,37 +129,53 @@ export function Navbar({ cartItemCount, onOpenCart }: NavbarProps) {
         </div>
       </div>
 
+      {/* BARRA PERMANENTE DE CAMBIO DE SEDE EN TELÉFONO / MÓVIL (Siempre visible y accesible en teléfonos) */}
+      <div className="md:hidden px-3.5 sm:px-6 py-2 bg-zinc-50 border-t border-zinc-200/90 flex items-center justify-between gap-2 shadow-2xs">
+        <div className="flex items-center gap-1.5 min-w-0">
+          <MapPin className="w-3.5 h-3.5 text-zinc-600 shrink-0" />
+          <span className="text-[10px] font-mono uppercase tracking-wider text-zinc-500 font-bold truncate">
+            Sede:
+          </span>
+          <span className="text-xs font-bold text-zinc-950 truncate">
+            {sedeSeleccionada === 'ica' ? 'Ica (Calle Bolívar)' : 'Huancayo (Jr. Guido)'}
+          </span>
+        </div>
+        <SedeSelector variant="segmented" className="shrink-0" />
+      </div>
+
       {/* Menú Móvil */}
       {mobileMenuOpen && (
-        <div className="md:hidden border-t border-zinc-200 bg-white px-4 py-4 space-y-2">
-          <Link
-            href="/"
-            onClick={() => setMobileMenuOpen(false)}
-            className="block px-3 py-2 text-sm font-medium text-zinc-800 hover:bg-zinc-100 rounded-lg"
-          >
-            Inicio
-          </Link>
-          <Link
-            href="/tienda"
-            onClick={() => setMobileMenuOpen(false)}
-            className="block px-3 py-2 text-sm font-medium text-zinc-800 hover:bg-zinc-100 rounded-lg"
-          >
-            Tienda Supply
-          </Link>
-          <Link
-            href="/cursos"
-            onClick={() => setMobileMenuOpen(false)}
-            className="block px-3 py-2 text-sm font-medium text-zinc-800 hover:bg-zinc-100 rounded-lg"
-          >
-            Cursos & Academia
-          </Link>
-          <Link
-            href="/admin"
-            onClick={() => setMobileMenuOpen(false)}
-            className="block px-3 py-2 text-sm font-medium text-zinc-600 hover:text-black border-t border-zinc-100 pt-3"
-          >
-            Panel Administrativo
-          </Link>
+        <div className="md:hidden border-t border-zinc-200 bg-white px-4 py-4 space-y-3">
+          <div className="space-y-1">
+            <Link
+              href="/"
+              onClick={() => setMobileMenuOpen(false)}
+              className="block px-3 py-2 text-sm font-medium text-zinc-800 hover:bg-zinc-100 rounded-lg"
+            >
+              Inicio
+            </Link>
+            <Link
+              href="/tienda"
+              onClick={() => setMobileMenuOpen(false)}
+              className="block px-3 py-2 text-sm font-medium text-zinc-800 hover:bg-zinc-100 rounded-lg"
+            >
+              Tienda Supply
+            </Link>
+            <Link
+              href="/cursos"
+              onClick={() => setMobileMenuOpen(false)}
+              className="block px-3 py-2 text-sm font-medium text-zinc-800 hover:bg-zinc-100 rounded-lg"
+            >
+              Cursos & Academia
+            </Link>
+            <Link
+              href="/admin"
+              onClick={() => setMobileMenuOpen(false)}
+              className="block px-3 py-2 text-sm font-medium text-zinc-600 hover:text-black border-t border-zinc-100 pt-3"
+            >
+              Panel Administrativo
+            </Link>
+          </div>
         </div>
       )}
     </header>

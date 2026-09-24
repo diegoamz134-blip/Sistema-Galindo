@@ -58,6 +58,15 @@ interface CartContextType {
   totalItems: number;
   totalPrice: number;
 
+  // Transición Animada de Sede y Modal de Bienvenida
+  isTransitioningSede: boolean;
+  targetSede: SedeId | null;
+  transitionMessage: string;
+  isWelcomeModalOpen: boolean;
+  setIsWelcomeModalOpen: (open: boolean) => void;
+  openWelcomeModal: () => void;
+  seleccionarSedeBienvenida: (sede: SedeId, recordar?: boolean) => void;
+
   // Animaciones y Notificaciones
   isCartBumping: boolean;
   triggerCartBump: () => void;
@@ -72,19 +81,26 @@ const CartContext = createContext<CartContextType | undefined>(undefined);
 
 const CART_STORAGE_KEY = 'galindo_cart_v1';
 const SEDE_STORAGE_KEY = 'galindo_sede_v1';
+const SEDE_PROMPTED_KEY = 'galindo_sede_welcome_prompted_v1';
 
 export function CartProvider({ children }: { children: React.ReactNode }) {
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
   const [cartOpen, setCartOpen] = useState(false);
-  const [sedeSeleccionada, setSedeSeleccionada] = useState<SedeId>(DEFAULT_SEDE_ID);
+  const [sedeSeleccionada, setSedeSeleccionadaState] = useState<SedeId>(DEFAULT_SEDE_ID);
   const [isLoaded, setIsLoaded] = useState(false);
+
+  // Estados de Transición y Bienvenida de Sedes
+  const [isTransitioningSede, setIsTransitioningSede] = useState(false);
+  const [targetSede, setTargetSede] = useState<SedeId | null>(null);
+  const [transitionMessage, setTransitionMessage] = useState('');
+  const [isWelcomeModalOpen, setIsWelcomeModalOpen] = useState(false);
 
   // Estados de animación y notificación
   const [isCartBumping, setIsCartBumping] = useState(false);
   const [flyingItems, setFlyingItems] = useState<FlyingItem[]>([]);
   const [toastNotification, setToastNotification] = useState<ToastData | null>(null);
 
-  // Cargar desde localStorage
+  // Cargar desde localStorage y verificar si se debe mostrar modal de bienvenida
   useEffect(() => {
     try {
       const savedCart = localStorage.getItem(CART_STORAGE_KEY);
@@ -93,14 +109,67 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       }
       const savedSede = localStorage.getItem(SEDE_STORAGE_KEY) as SedeId | null;
       if (savedSede && (savedSede === 'ica' || savedSede === 'huancayo')) {
-        setSedeSeleccionada(savedSede);
+        setSedeSeleccionadaState(savedSede);
+      }
+
+      // Comprobar si ya se seleccionó sede en esta sesión de navegación
+      const alreadyPrompted = sessionStorage.getItem(SEDE_PROMPTED_KEY);
+      if (!alreadyPrompted) {
+        // Mostrar modal inicial estilo licorería para seleccionar sede
+        setIsWelcomeModalOpen(true);
       }
     } catch (e) {
-      console.error('Error loading cart from localStorage', e);
+      console.error('Error loading cart/sede from storage', e);
     } finally {
       setIsLoaded(true);
     }
   }, []);
+
+  // Función para ejecutar cambio animado de sede con subpantalla de carga
+  const triggerSedeTransition = (nuevaSede: SedeId, customMsg?: string) => {
+    setTargetSede(nuevaSede);
+    setTransitionMessage(
+      customMsg || (nuevaSede === 'huancayo' ? 'Cambiando a Sede Huancayo...' : 'Cambiando a Sede Ica...')
+    );
+    setIsTransitioningSede(true);
+
+    // A los 450ms se aplica el cambio real de estado y almacenamiento
+    setTimeout(() => {
+      setSedeSeleccionadaState(nuevaSede);
+      try {
+        localStorage.setItem(SEDE_STORAGE_KEY, nuevaSede);
+      } catch {}
+    }, 450);
+
+    // A los 880ms se retira la subpantalla suavemente
+    setTimeout(() => {
+      setIsTransitioningSede(false);
+      setTargetSede(null);
+    }, 880);
+  };
+
+  const setSedeSeleccionada = (nuevaSede: SedeId) => {
+    if (nuevaSede === sedeSeleccionada && !isWelcomeModalOpen) return;
+    triggerSedeTransition(nuevaSede);
+  };
+
+  const seleccionarSedeBienvenida = (nuevaSede: SedeId, recordar: boolean = true) => {
+    try {
+      sessionStorage.setItem(SEDE_PROMPTED_KEY, 'true');
+      if (recordar) {
+        localStorage.setItem(SEDE_STORAGE_KEY, nuevaSede);
+      }
+    } catch {}
+    setIsWelcomeModalOpen(false);
+    triggerSedeTransition(
+      nuevaSede,
+      `Bienvenido • Conectando con Sede ${nuevaSede === 'huancayo' ? 'Huancayo' : 'Ica'}...`
+    );
+  };
+
+  const openWelcomeModal = () => {
+    setIsWelcomeModalOpen(true);
+  };
 
   // Guardar en localStorage al cambiar
   useEffect(() => {
@@ -247,6 +316,13 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         setModoAlumno: () => {},
         sedeSeleccionada,
         setSedeSeleccionada,
+        isTransitioningSede,
+        targetSede,
+        transitionMessage,
+        isWelcomeModalOpen,
+        setIsWelcomeModalOpen,
+        openWelcomeModal,
+        seleccionarSedeBienvenida,
         totalItems,
         totalPrice,
         isCartBumping,

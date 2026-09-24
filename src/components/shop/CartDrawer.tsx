@@ -3,11 +3,12 @@
 import React from 'react';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ShoppingCart, X, Plus, Minus, Trash2, ArrowRight, ArrowLeft, Ticket, Boxes } from 'lucide-react';
+import { ShoppingCart, X, Plus, Minus, Trash2, ArrowRight, ArrowLeft, Ticket, Boxes, MapPin, AlertTriangle } from 'lucide-react';
 import { Producto } from '@/types/database';
 import { formatCurrency } from '@/lib/utils';
+import { SEDES, SedeId } from '@/lib/constants';
 
-import { CartItem } from '@/context/CartContext';
+import { CartItem, useCart } from '@/context/CartContext';
 export type { CartItem };
 
 interface CartDrawerProps {
@@ -25,6 +26,11 @@ export function CartDrawer({
   onUpdateQuantity,
   onRemoveItem,
 }: CartDrawerProps) {
+  const { sedeSeleccionada, setSedeSeleccionada } = useCart();
+  const sedeActual = SEDES[sedeSeleccionada] || SEDES['ica'];
+  const otraSedeKey: SedeId = sedeSeleccionada === 'ica' ? 'huancayo' : 'ica';
+  const otraSede = SEDES[otraSedeKey];
+
   const totalItems = items.reduce((acc, item) => acc + item.cantidad, 0);
 
   const totalPagar = items.reduce((acc, item) => {
@@ -81,6 +87,23 @@ export function CartDrawer({
                     <X className="w-5 h-5" />
                   </button>
                 </div>
+
+                {/* Pill de Sede activa de recojo con opción de cambio rápido */}
+                <div className="mt-3.5 p-2 rounded-xl bg-zinc-50 border border-zinc-200/90 flex items-center justify-between gap-2 text-xs">
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <MapPin className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                    <span className="text-[11px] text-zinc-600 truncate">
+                      Sede: <strong className="text-zinc-950">{sedeActual.nombre}</strong>
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setSedeSeleccionada(otraSedeKey)}
+                    className="text-[10px] font-mono font-bold text-zinc-700 hover:text-black bg-white px-2 py-0.5 rounded border border-zinc-200 hover:border-black transition-colors cursor-pointer shrink-0"
+                  >
+                    Cambiar a {otraSede.ciudad}
+                  </button>
+                </div>
               </div>
 
               {/* Lista de Items con espaciado amplio y adaptativo */}
@@ -128,11 +151,41 @@ export function CartDrawer({
                           <h4 className="text-xs font-bold text-zinc-950 line-clamp-2 leading-snug">
                             {item.producto.nombre}
                           </h4>
-                          <div className="flex items-center gap-2 mt-1">
+                          <div className="flex flex-wrap items-center gap-2 mt-1">
                             <span className="text-[10px] text-zinc-400 font-mono">
                               SKU: {item.producto.sku}
                             </span>
+                            {item.tipo !== 'matricula' && (
+                              <span className="text-[10px] font-mono text-zinc-500">
+                                • {sedeActual.ciudad}: {sedeSeleccionada === 'ica' ? (item.producto.stock_ica ?? item.producto.stock) : (item.producto.stock_huancayo ?? 0)} un.
+                              </span>
+                            )}
                           </div>
+
+                          {/* Alerta si no hay stock en la sede activa */}
+                          {item.tipo !== 'matricula' && (
+                            (() => {
+                              const stockEnSede = sedeSeleccionada === 'ica' 
+                                ? (item.producto.stock_ica ?? item.producto.stock) 
+                                : (item.producto.stock_huancayo ?? 0);
+                              const stockOtraSede = sedeSeleccionada === 'ica'
+                                ? (item.producto.stock_huancayo ?? 0)
+                                : (item.producto.stock_ica ?? item.producto.stock);
+
+                              if (stockEnSede <= 0) {
+                                return (
+                                  <div className="mt-1.5 flex items-center gap-1.5 text-[10px] font-medium text-amber-800 bg-amber-50/90 px-2 py-0.5 rounded-md border border-amber-200">
+                                    <AlertTriangle className="w-3 h-3 shrink-0 text-amber-600" />
+                                    <span>
+                                      Agotado en {sedeActual.ciudad}
+                                      {stockOtraSede > 0 ? ` (Disponible en ${otraSede.ciudad}: ${stockOtraSede} un.)` : ''}
+                                    </span>
+                                  </div>
+                                );
+                              }
+                              return null;
+                            })()
+                          )}
 
                           <div className="flex items-center justify-between mt-2 pt-1.5 border-t border-zinc-200/50">
                             <span className="text-xs font-black text-zinc-950 font-mono">
@@ -226,8 +279,8 @@ export function CartDrawer({
                     </button>
                   </div>
 
-                  <p className="text-[10px] text-zinc-400 text-center leading-relaxed">
-                    Elegirás la sede de recojo (Ica o Huancayo) en el checkout.
+                  <p className="text-[10px] text-zinc-500 text-center leading-relaxed">
+                    Prepararemos tu pedido para recojo en <strong className="text-zinc-900">{sedeActual.nombre}</strong> ({sedeActual.direccion}).
                   </p>
                 </div>
               )}

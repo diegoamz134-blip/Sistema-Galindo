@@ -142,22 +142,34 @@ export async function procesarPedidoWeb(
 
       if (!esCurso && !item.producto.id.startsWith('mock-')) {
         try {
-          const nuevoStock = Math.max(0, (item.producto.stock || 0) - item.cantidad);
+          const esHuancayo = input.sedeId === 'huancayo';
+          const stockPrev = esHuancayo 
+            ? (item.producto.stock_huancayo ?? 0) 
+            : (item.producto.stock_ica ?? item.producto.stock ?? 0);
+          const nuevoStock = Math.max(0, stockPrev - item.cantidad);
 
-          // Actualizar stock
-          await supabase
-            .from('productos')
-            .update({ stock: nuevoStock })
-            .eq('id', item.producto.id);
+          // Actualizar stock de la sede correspondiente
+          if (esHuancayo) {
+            await supabase
+              .from('productos')
+              .update({ stock_huancayo: nuevoStock })
+              .eq('id', item.producto.id);
+          } else {
+            await supabase
+              .from('productos')
+              .update({ stock_ica: nuevoStock })
+              .eq('id', item.producto.id);
+          }
 
-          // Registrar en Kardex (movimientos_inventario)
+          // Registrar en Kardex (movimientos_inventario) con sede específica
           await supabase.from('movimientos_inventario').insert({
             producto_id: item.producto.id,
             tipo: 'SALIDA',
             cantidad: item.cantidad,
-            stock_anterior: item.producto.stock || 0,
+            stock_anterior: stockPrev,
             stock_nuevo: nuevoStock,
-            motivo: `Pedido Web Recojo #${input.codigoPedido} - Cliente: ${input.clienteNombre}`,
+            sede: esHuancayo ? 'huancayo' : 'ica',
+            motivo: `Pedido Web Recojo #${input.codigoPedido} (${sedeActual.nombre}) - Cliente: ${input.clienteNombre}`,
             usuario_id: '00000000-0000-0000-0000-000000000001',
             usuario_nombre: 'Tienda Online Galindo',
             referencia_id: input.codigoPedido,
