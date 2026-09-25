@@ -138,7 +138,7 @@ export default function HomePage() {
               <div className="flex items-center gap-2.5 text-xs font-mono uppercase tracking-widest text-cyan-400 font-bold flex-wrap">
                 <span>Academia Profesional</span>
                 <span className="text-zinc-400">•</span>
-                <span>Distribuidor Autorizado</span>
+                <span>Herramientas 100% Originales</span>
                 <span className="text-zinc-400">•</span>
                 <span className="text-white bg-white/10 px-2 py-0.5 rounded-md border border-white/20 inline-flex items-center gap-1">
                   <MapPin className="w-3 h-3 text-cyan-400" />
@@ -151,7 +151,7 @@ export default function HomePage() {
               </h1>
 
               <p className="text-sm sm:text-base text-zinc-200 leading-relaxed max-w-xl drop-shadow-sm font-medium">
-                Formación técnica profesional y práctica real en {sedeActual.ciudad}. Cursos de fade, tijera y visagismo capilar, con tienda oficial de máquinas Wahl, BaBylissPRO y kits para estudiantes.
+                Formación técnica profesional y práctica real en {sedeActual.ciudad}. Cursos de fade, tijera y visagismo capilar, con tienda de máquinas originales Wahl, BaBylissPRO y kits para estudiantes.
               </p>
 
               {/* Selector Rápido de Sede en Hero */}

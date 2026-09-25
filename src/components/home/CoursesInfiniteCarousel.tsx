@@ -4,17 +4,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
 import {
-  MapPin,
   ArrowRight,
-  GraduationCap,
-  Sparkles,
-  CheckCircle2,
-  Clock,
-  Calendar,
-  Pause,
-  Play,
-  ChevronLeft,
-  ChevronRight,
   MessageCircle,
 } from 'lucide-react';
 import { Curso } from '@/types/database';
@@ -42,16 +32,8 @@ export function CoursesInfiniteCarousel({
   const repeatCount = Math.max(2, Math.ceil(8 / (cursos.length || 1)));
   const duplicatedCursos = Array.from({ length: repeatCount }).flatMap(() => cursos);
 
-  // Control manual con botones de flecha (desplaza suavemente 380px)
-  const handleScrollManual = (direction: 'left' | 'right') => {
-    if (!scrollContainerRef.current) return;
-    const container = scrollContainerRef.current;
-    const offset = direction === 'left' ? -380 : 380;
-    container.scrollBy({ left: offset, behavior: 'smooth' });
-  };
-
-  // Duración dinámica según el número de tarjetas
-  const animationDuration = Math.max(30, duplicatedCursos.length * 6);
+  // Duración dinámica según el número de tarjetas (velocidad más ágil y rápida)
+  const animationDuration = Math.max(14, duplicatedCursos.length * 2.2);
 
   return (
     <div className="relative w-full space-y-6">
@@ -77,64 +59,7 @@ export function CoursesInfiniteCarousel({
         }
       `}</style>
 
-      {/* Controles de cabecera del carrusel: Indicador de estado y botones manuales */}
-      <div className="flex flex-wrap items-center justify-between gap-3 px-1">
-        <div className="flex items-center gap-2">
-          <span className="relative flex h-2.5 w-2.5">
-            <span
-              className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${
-                isPaused ? 'bg-amber-400' : 'bg-emerald-400'
-              }`}
-            />
-            <span
-              className={`relative inline-flex rounded-full h-2.5 w-2.5 ${
-                isPaused ? 'bg-amber-500' : 'bg-emerald-500'
-              }`}
-            />
-          </span>
-          <span className="text-[11px] font-mono uppercase tracking-wider text-zinc-500 font-semibold">
-            {isPaused ? 'Carrusel en Pausa (Listo para Seleccionar)' : 'En Desplazamiento Continuo'}
-          </span>
-          <span className="hidden sm:inline text-zinc-300">•</span>
-          <span className="hidden sm:inline text-[11px] text-zinc-400 font-medium">
-            Pasa el cursor o presiona con el dedo para detener
-          </span>
-        </div>
 
-        {/* Botones de control interactivo */}
-        <div className="flex items-center gap-1.5 ml-auto">
-          <button
-            type="button"
-            onClick={() => setIsPaused(!isPaused)}
-            className={`p-2 rounded-xl border text-xs font-mono transition-all flex items-center gap-1.5 cursor-pointer select-none ${
-              isPaused
-                ? 'bg-zinc-950 text-white border-zinc-900 shadow-xs'
-                : 'bg-white text-zinc-700 border-zinc-200 hover:bg-zinc-50'
-            }`}
-            title={isPaused ? 'Reanudar movimiento' : 'Pausar carrusel'}
-          >
-            {isPaused ? <Play className="w-3.5 h-3.5" /> : <Pause className="w-3.5 h-3.5" />}
-            <span className="text-[11px] font-bold">{isPaused ? 'Reanudar' : 'Pausar'}</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => handleScrollManual('left')}
-            className="p-2 rounded-xl bg-white border border-zinc-200 text-zinc-700 hover:text-black hover:bg-zinc-50 transition-colors shadow-2xs cursor-pointer active:scale-95"
-            aria-label="Anterior curso"
-          >
-            <ChevronLeft className="w-4 h-4" />
-          </button>
-          <button
-            type="button"
-            onClick={() => handleScrollManual('right')}
-            className="p-2 rounded-xl bg-white border border-zinc-200 text-zinc-700 hover:text-black hover:bg-zinc-50 transition-colors shadow-2xs cursor-pointer active:scale-95"
-            aria-label="Siguiente curso"
-          >
-            <ChevronRight className="w-4 h-4" />
-          </button>
-        </div>
-      </div>
 
       {/* ÁREA DEL CARRUSEL INFINITO CON DEGRADADOS LATERALES */}
       <div
@@ -175,33 +100,13 @@ export function CoursesInfiniteCarousel({
                       loading="lazy"
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                     />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-black/20 pointer-events-none" />
-
-                    {/* Insignia de Sede */}
-                    <div className="absolute top-2.5 left-2.5">
-                      <span className="px-2.5 py-1 rounded-lg bg-zinc-950/90 backdrop-blur-md text-amber-300 text-[10px] font-mono font-bold border border-amber-400/30 flex items-center gap-1 shadow-sm">
-                        <MapPin className="w-3 h-3 text-amber-400" />
-                        <span>Sede {sedeActual.ciudad}</span>
-                      </span>
-                    </div>
-
-                    {/* Insignia de Modalidad */}
-                    <div className="absolute top-2.5 right-2.5">
-                      <span className="px-2 py-0.5 rounded-md bg-white/90 backdrop-blur-md text-zinc-900 text-[10px] font-mono font-bold shadow-sm">
-                        Ciclo 2026
-                      </span>
-                    </div>
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent pointer-events-none" />
 
                     {/* Duración sobre la imagen */}
-                    <div className="absolute bottom-2.5 left-2.5 right-2.5 flex items-center justify-between text-white text-[11px] font-mono">
+                    <div className="absolute bottom-2.5 left-2.5 text-white text-[11px] font-mono">
                       <span className="bg-black/60 backdrop-blur-xs px-2 py-0.5 rounded">
                         {curso.duracion_semanas} Semanas • {curso.horas_academicas || 60} Horas
                       </span>
-                      {curso.incluye_kit && (
-                        <span className="bg-emerald-600/90 text-white font-bold px-2 py-0.5 rounded text-[10px]">
-                          Kit Incluido
-                        </span>
-                      )}
                     </div>
                   </div>
 

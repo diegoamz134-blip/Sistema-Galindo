@@ -8,13 +8,11 @@ import {
   Check,
   Copy,
   Store,
-  MapPin,
   Clock,
   ShieldCheck,
   CreditCard,
   Banknote,
   Smartphone,
-  ExternalLink,
   ShoppingCart,
   Sparkles,
   Ticket,
@@ -52,7 +50,6 @@ export default function CheckoutPage() {
     addToCart,
     clearCart,
     sedeSeleccionada,
-    setSedeSeleccionada,
   } = useCart();
   const sedeActual = SEDES[sedeSeleccionada] || SEDES['ica'];
 
@@ -79,6 +76,7 @@ export default function CheckoutPage() {
   const [tipoDocumento, setTipoDocumento] = useState<'DNI' | 'CE'>('DNI');
   const [numeroDocumento, setNumeroDocumento] = useState('');
   const [notas, setNotas] = useState('');
+  const [aceptaTerminos, setAceptaTerminos] = useState(true);
 
   // Método de pago y cálculos interactivos
   const [metodoPago, setMetodoPago] = useState<MetodoPagoCheckout>('YAPE');
@@ -276,6 +274,11 @@ export default function CheckoutPage() {
 
     if (localItems.length === 0) {
       setErrorPedido('Tu pedido está vacío. Agrega productos o un curso para continuar.');
+      return;
+    }
+
+    if (!aceptaTerminos) {
+      setErrorPedido('Debes aceptar los Términos y Condiciones y la Política de Privacidad para continuar.');
       return;
     }
 
@@ -1344,125 +1347,7 @@ export default function CheckoutPage() {
               </AnimatePresence>
             </motion.div>
 
-            {/* SECCIÓN 4: Selector Interactivo de Sede de Recojo Físico */}
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.15 }}
-              className="p-6 rounded-2xl bg-white border border-zinc-200 shadow-sm space-y-4"
-            >
-              <div className="flex items-center justify-between border-b border-zinc-100 pb-3">
-                <div className="flex items-center gap-2">
-                  <div className="w-6 h-6 rounded-full bg-black text-white text-xs font-mono font-bold flex items-center justify-center">
-                    4
-                  </div>
-                  <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-950 flex items-center gap-1.5">
-                    <MapPin className="w-4 h-4 text-zinc-900" />
-                    <span>¿En qué sede retirarás tus productos? *</span>
-                  </h3>
-                </div>
-                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono bg-emerald-50 text-emerald-700 font-bold border border-emerald-200">
-                  Recojo Gratis S/ 0.00
-                </span>
-              </div>
 
-              <p className="text-xs text-zinc-600">
-                Selecciona la sede física donde te acercarás a mostrador. El ticket y el WhatsApp se dirigirán al número de la sede elegida:
-              </p>
-
-              {/* Selector de Tarjetas para las Dos Sedes */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
-                {(Object.keys(SEDES) as SedeId[]).map((key) => {
-                  const sede = SEDES[key];
-                  const isSelected = sedeSeleccionada === key;
-
-                  return (
-                    <div
-                      key={key}
-                      onClick={() => setSedeSeleccionada(key)}
-                      className={`relative p-4 rounded-xl border-2 transition-all cursor-pointer flex flex-col justify-between gap-3 text-left ${
-                        isSelected
-                          ? 'border-black bg-zinc-900 text-white shadow-md'
-                          : 'border-zinc-200 bg-zinc-50 hover:bg-white hover:border-zinc-300 text-zinc-800'
-                      }`}
-                    >
-                      {/* Check de Selección */}
-                      {isSelected && (
-                        <div className="absolute top-3 right-3 w-5 h-5 rounded-full bg-emerald-500 text-white flex items-center justify-center shadow">
-                          <Check className="w-3 h-3 stroke-[3]" />
-                        </div>
-                      )}
-
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className={`text-[10px] font-mono font-bold uppercase tracking-wider px-2 py-0.5 rounded ${
-                            isSelected ? 'bg-white/20 text-white' : 'bg-zinc-200 text-zinc-700'
-                          }`}>
-                            {sede.ciudad}
-                          </span>
-                          <span className={`text-xs font-bold ${isSelected ? 'text-white' : 'text-zinc-950'}`}>
-                            {sede.nombre}
-                          </span>
-                        </div>
-
-                        <p className={`text-xs font-semibold mt-2 ${isSelected ? 'text-zinc-200' : 'text-zinc-900'}`}>
-                          {sede.direccion}
-                        </p>
-                        <p className={`text-[11px] ${isSelected ? 'text-zinc-400' : 'text-zinc-500'}`}>
-                          {sede.referencia}
-                        </p>
-                      </div>
-
-                      <div className={`pt-2.5 border-t text-[11px] font-mono space-y-1 ${
-                        isSelected ? 'border-zinc-700 text-zinc-300' : 'border-zinc-200 text-zinc-600'
-                      }`}>
-                        <div className="flex items-center justify-between">
-                          <span>WhatsApp / Cel:</span>
-                          <strong className={isSelected ? 'text-emerald-400' : 'text-emerald-700'}>
-                            {sede.whatsappDisplay}
-                          </strong>
-                        </div>
-                        <div className="flex items-center justify-between text-[10px]">
-                          <span>Horario:</span>
-                          <span>{sede.horario}</span>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center justify-between pt-1">
-                        <span className={`text-[10px] font-semibold ${isSelected ? 'text-zinc-400' : 'text-zinc-500'}`}>
-                          {isSelected ? '✓ Sede Activa' : 'Clic para elegir'}
-                        </span>
-                        <a
-                          href={sede.mapsUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          onClick={(e) => e.stopPropagation()}
-                          className={`text-[11px] font-bold hover:underline inline-flex items-center gap-1 ${
-                            isSelected ? 'text-white' : 'text-zinc-950'
-                          }`}
-                        >
-                          <span>Ver Mapa</span>
-                          <ExternalLink className="w-3 h-3" />
-                        </a>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-
-              {/* Banner informativo del envío */}
-              <div className="p-3 rounded-xl bg-emerald-50/80 border border-emerald-200/80 flex items-center justify-between text-xs">
-                <div className="flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full bg-emerald-500" />
-                  <span className="text-emerald-950 font-medium">
-                    Atención directa al WhatsApp de <strong>{sedeActual.nombre}</strong> ({sedeActual.whatsappDisplay})
-                  </span>
-                </div>
-                <span className="text-[10px] font-mono font-bold text-emerald-800 uppercase bg-emerald-100 px-2 py-0.5 rounded">
-                  Stock Local
-                </span>
-              </div>
-            </motion.div>
 
           </div>
 
@@ -1635,6 +1520,29 @@ export default function CheckoutPage() {
                     <span>{errorPedido}</span>
                   </div>
                 )}
+
+                {/* Aceptación obligatoria de Términos y Condiciones y Privacidad (Ley N° 29733 y Ley N° 29571) */}
+                <div data-ignore-pdf="true" className="p-2.5 rounded-xl bg-zinc-50 border border-zinc-200 text-[11px] text-zinc-600">
+                  <label className="flex items-start gap-2 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={aceptaTerminos}
+                      onChange={(e) => setAceptaTerminos(e.target.checked)}
+                      className="w-4 h-4 rounded border-zinc-300 text-black focus:ring-black cursor-pointer mt-0.5 shrink-0 accent-black"
+                    />
+                    <span className="leading-snug">
+                      He leído y acepto los{' '}
+                      <Link href="/terminos" target="_blank" className="font-bold underline text-zinc-950 hover:text-black">
+                        Términos y Condiciones
+                      </Link>{' '}
+                      y la{' '}
+                      <Link href="/privacidad" target="_blank" className="font-bold underline text-zinc-950 hover:text-black">
+                        Política de Privacidad
+                      </Link>
+                      .
+                    </span>
+                  </label>
+                </div>
 
                 {/* BOTÓN PRINCIPAL DE GENERACIÓN Y CONFIRMACIÓN (Ignorados al imprimir PDF) */}
                 <div data-ignore-pdf="true" className="space-y-2 pt-1">

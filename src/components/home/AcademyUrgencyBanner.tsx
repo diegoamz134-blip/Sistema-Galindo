@@ -49,7 +49,7 @@ export function AcademyUrgencyBanner() {
             </div>
 
             <div className="text-zinc-300 bg-zinc-800/90 px-3 py-1.5 rounded-xl border border-zinc-700/60 font-medium">
-              <span>Certificación Oficial al Egresar</span>
+              <span>Certificado de la Academia al Egresar</span>
             </div>
           </div>
 

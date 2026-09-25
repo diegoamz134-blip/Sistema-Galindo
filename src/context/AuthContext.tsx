@@ -96,15 +96,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       });
 
       if (error) {
-        let friendlyMessage = 'Credenciales no válidas.';
-        if (error.message.includes('Invalid login credentials')) {
-          friendlyMessage = 'El correo electrónico o la contraseña ingresados son incorrectos.';
-        } else if (error.message.includes('Email not confirmed')) {
-          friendlyMessage = 'El correo electrónico aún no ha sido confirmado en la base de datos.';
-        } else if (error.status === 0 || error.message.includes('Failed to fetch')) {
-          friendlyMessage = 'No se pudo conectar con el servidor de autenticación. Verifica tu conexión a internet.';
+        let friendlyMessage = 'Credenciales de acceso incorrectas. Verifique su correo y contraseña.';
+        const msg = (error.message || '').toLowerCase();
+
+        if (
+          msg.includes('invalid login credentials') ||
+          msg.includes('email not confirmed') ||
+          msg.includes('invalid_grant') ||
+          msg.includes('user not found')
+        ) {
+          // Práctica de seguridad OWASP: Mensaje uniforme para evitar enumeración de usuarios
+          friendlyMessage = 'Credenciales de acceso incorrectas. Verifique su correo y contraseña.';
+        } else if (error.status === 429 || msg.includes('rate limit') || msg.includes('too many requests')) {
+          friendlyMessage = 'Demasiadas solicitudes. Por motivos de seguridad, espere unos momentos antes de reintentar.';
+        } else if (error.status === 0 || msg.includes('failed to fetch') || msg.includes('networkerror')) {
+          friendlyMessage = 'No se pudo conectar con el servidor de autenticación. Verifique su conexión a internet.';
         } else {
-          friendlyMessage = error.message;
+          // No exponer nombres de tablas, esquemas o errores internos de Supabase
+          friendlyMessage = 'No fue posible iniciar sesión. Verifique sus credenciales de acceso.';
         }
 
         return { success: false, error: friendlyMessage };
@@ -117,11 +126,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       return { success: false, error: 'No se pudo generar la sesión de acceso.' };
-    } catch (err: unknown) {
-      const authErr = err as AuthError;
+    } catch {
+      // Sanitizar excepción para nunca exponer trazas de error ni variables sensibles
       return {
         success: false,
-        error: authErr?.message || 'Error inesperado al intentar iniciar sesión.',
+        error: 'No se pudo conectar con el servidor de autenticación. Verifique su conexión.',
       };
     } finally {
       setIsLoading(false);
