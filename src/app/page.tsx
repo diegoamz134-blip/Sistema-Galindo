@@ -12,14 +12,13 @@ import { FeaturedProductsCarousel } from '@/components/shop/FeaturedProductsCaro
 import { useCart } from '@/context/CartContext';
 import { formatCurrency, generateWhatsAppLink } from '@/lib/utils';
 import { SEDES, SedeId } from '@/lib/constants';
-import { MOCK_PRODUCTOS, MOCK_CURSOS } from '@/lib/mock-data';
+import { MOCK_PRODUCTOS } from '@/lib/mock-data';
 import { Producto, Curso } from '@/types/database';
 import { supabase } from '@/lib/supabase';
 import { getCursosActivos } from '@/lib/academia-service';
-import { AcademyUrgencyBanner } from '@/components/home/AcademyUrgencyBanner';
 import { SedeCentralSection } from '@/components/home/SedeCentralSection';
-import { FaqAccordion } from '@/components/home/FaqAccordion';
-import { CoursesInfiniteCarousel } from '@/components/home/CoursesInfiniteCarousel';
+import { FeaturedCourseSection } from '@/components/home/FeaturedCourseSection';
+import { FloatingWhatsAppButton } from '@/components/common/FloatingWhatsAppButton';
 
 
 export default function HomePage() {
@@ -87,8 +86,21 @@ export default function HomePage() {
     }
 
     cargarDatosHome();
+
+    const handleCursoDestacadoChanged = (e: any) => {
+      const nuevoId = e.detail;
+      setCursos((prev) =>
+        prev.map((c) => ({
+          ...c,
+          destacado: c.id === nuevoId,
+        }))
+      );
+    };
+    window.addEventListener('galindo_curso_destacado_changed', handleCursoDestacadoChanged);
+
     return () => {
       isMounted = false;
+      window.removeEventListener('galindo_curso_destacado_changed', handleCursoDestacadoChanged);
     };
   }, [sedeSeleccionada]);
 
@@ -249,25 +261,8 @@ export default function HomePage() {
       </section>
 
       {/* 4. PROGRAMAS ACADÉMICOS & FORMACIÓN PRÁCTICA */}
-      <section className="py-24 border-y border-zinc-300/80 bg-[#F1F3F5] overflow-hidden">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 space-y-12">
-          
-          {/* Cintillo de Urgencia & Vacantes del Próximo Ciclo (solo si hay cursos activos) */}
-          {cursos.length > 0 && <AcademyUrgencyBanner />}
-
-          <div>
-            <div className="mb-12 max-w-xl">
-              <span className="text-xs font-mono uppercase tracking-widest text-zinc-500 font-semibold block mb-1">
-                Capacitación Técnica Profesional
-              </span>
-              <h2 className="text-2xl sm:text-3xl font-black text-zinc-950 uppercase tracking-tight">
-                Cursos de Barbería en {sedeActual.ciudad}
-              </h2>
-              <p className="text-xs sm:text-sm text-zinc-600 mt-2 leading-relaxed">
-                Aprende desde los fundamentos básicos hasta técnicas avanzadas de desvanecido, tijera clásica y afeitado tradicional con modelos reales.
-              </p>
-            </div>
-
+      <section className="py-20 sm:py-24 border-y border-zinc-300/80 bg-[#F1F3F5] overflow-hidden">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
             {cursos.length === 0 ? (
               <div className="bg-white rounded-3xl p-8 sm:p-12 text-center border border-zinc-200 shadow-xs max-w-xl mx-auto space-y-4">
                 <div className="w-14 h-14 rounded-full bg-zinc-100 text-zinc-600 flex items-center justify-center mx-auto shadow-xs border border-zinc-200">
@@ -312,10 +307,8 @@ export default function HomePage() {
                 </div>
               </div>
             ) : (
-              <CoursesInfiniteCarousel cursos={cursos} sedeActual={sedeActual} />
+              <FeaturedCourseSection cursos={cursos} sedeActual={sedeActual} />
             )}
-          </div>
-
         </div>
       </section>
 
@@ -324,8 +317,6 @@ export default function HomePage() {
       {/* 6. SEDE FÍSICA CENTRAL EN ICA (CALLE BOLÍVAR) */}
       <SedeCentralSection />
 
-      {/* 7. PREGUNTAS FRECUENTES INTERACTIVAS */}
-      <FaqAccordion />
 
       {/* Cart Drawer */}
       <CartDrawer
@@ -342,6 +333,9 @@ export default function HomePage() {
         onClose={() => setQuickViewProducto(null)}
         onAddToCart={handleAddToCart}
       />
+
+      {/* Botón Flotante Animado de WhatsApp */}
+      <FloatingWhatsAppButton />
 
       <Footer />
     </div>

@@ -25,7 +25,6 @@ export function RegistrarPagoCuotaModal({
   const [metodoPago, setMetodoPago] = useState<string>('YAPE');
   const [numeroOperacion, setNumeroOperacion] = useState<string>('');
   const [notas, setNotas] = useState<string>('');
-  const [registrarEnCaja, setRegistrarEnCaja] = useState<boolean>(true);
   const [procesando, setProcesando] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
@@ -43,7 +42,6 @@ export function RegistrarPagoCuotaModal({
       metodo_pago: metodoPago,
       numero_operacion: numeroOperacion.trim() || undefined,
       notas: notas.trim() || undefined,
-      registrar_en_caja: registrarEnCaja,
     });
 
     if (res.ok) {
@@ -170,17 +168,7 @@ export function RegistrarPagoCuotaModal({
             />
           </div>
 
-          <label className="flex items-center gap-2 cursor-pointer select-none pt-1">
-            <input
-              type="checkbox"
-              checked={registrarEnCaja}
-              onChange={(e) => setRegistrarEnCaja(e.target.checked)}
-              className="w-4 h-4 rounded text-black focus:ring-0 cursor-pointer"
-            />
-            <span className="font-medium text-zinc-800">
-              Registrar ingreso de este cobro en Caja Chica
-            </span>
-          </label>
+
 
           <div className="flex items-center justify-end gap-2 pt-3 border-t border-zinc-200">
             <button

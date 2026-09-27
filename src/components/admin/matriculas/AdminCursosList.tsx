@@ -15,6 +15,7 @@ import {
   Trash2,
   AlertTriangle,
   X,
+  Star,
 } from 'lucide-react';
 import { Curso } from '@/types/database';
 import { formatCurrency } from '@/lib/utils';
@@ -24,6 +25,7 @@ interface AdminCursosListProps {
   onCrearCurso: () => void;
   onEditarCurso: (curso: Curso) => void;
   onToggleActivo: (cursoId: string, nuevoEstado: boolean) => void;
+  onMarcarDestacado?: (cursoId: string) => Promise<void> | void;
   onEliminarCurso: (cursoId: string) => Promise<void> | void;
   onVaciarCursos: () => Promise<void> | void;
 }
@@ -33,6 +35,7 @@ export function AdminCursosList({
   onCrearCurso,
   onEditarCurso,
   onToggleActivo,
+  onMarcarDestacado,
   onEliminarCurso,
   onVaciarCursos,
 }: AdminCursosListProps) {
@@ -174,7 +177,7 @@ export function AdminCursosList({
                     <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-black/20" />
 
                     {/* Badge de Estado */}
-                    <div className="absolute top-2.5 left-2.5">
+                    <div className="absolute top-2.5 left-2.5 flex items-center gap-1.5">
                       <span
                         className={`px-2 py-0.5 rounded-md text-[9px] font-bold font-mono uppercase tracking-wider backdrop-blur-md shadow-xs border ${
                           esActivo
@@ -184,6 +187,12 @@ export function AdminCursosList({
                       >
                         {esActivo ? '● Visible' : '○ Pausado'}
                       </span>
+                      {curso.destacado && (
+                        <span className="px-2 py-0.5 rounded-md text-[9px] font-bold font-mono uppercase tracking-wider bg-amber-400 text-amber-950 shadow-xs border border-amber-300 flex items-center gap-1">
+                          <Star className="w-2.5 h-2.5 fill-amber-950" />
+                          <span>Recomendado</span>
+                        </span>
+                      )}
                     </div>
 
                     {/* Badge de Duración */}
@@ -263,20 +272,36 @@ export function AdminCursosList({
                 </div>
 
                 {/* Barra de Acciones del Curso */}
-                <div className="p-2.5 bg-zinc-50 border-t border-zinc-100 flex items-center justify-between gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => onToggleActivo(curso.id, !esActivo)}
-                    className={`px-2.5 py-1.5 rounded-lg text-[11px] font-semibold transition-colors flex items-center gap-1 cursor-pointer border ${
-                      esActivo
-                        ? 'bg-white hover:bg-zinc-100 text-zinc-700 border-zinc-200'
-                        : 'bg-emerald-600 hover:bg-emerald-700 text-white border-transparent'
-                    }`}
-                    title={esActivo ? 'Pausar visibilidad' : 'Publicar en portada'}
-                  >
-                    <Power className="w-3 h-3" />
-                    <span>{esActivo ? 'Pausar' : 'Activar'}</span>
-                  </button>
+                <div className="p-2.5 bg-zinc-50 border-t border-zinc-100 flex items-center justify-between gap-1.5 flex-wrap">
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => onToggleActivo(curso.id, !esActivo)}
+                      className={`px-2 py-1.5 rounded-lg text-[10px] font-semibold transition-colors flex items-center gap-1 cursor-pointer border ${
+                        esActivo
+                          ? 'bg-white hover:bg-zinc-100 text-zinc-700 border-zinc-200'
+                          : 'bg-emerald-600 hover:bg-emerald-700 text-white border-transparent'
+                      }`}
+                      title={esActivo ? 'Pausar visibilidad' : 'Publicar en portada'}
+                    >
+                      <Power className="w-3 h-3" />
+                      <span>{esActivo ? 'Pausar' : 'Activar'}</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => onMarcarDestacado?.(curso.id)}
+                      className={`px-2 py-1.5 rounded-lg text-[10px] font-semibold transition-colors flex items-center gap-1 cursor-pointer border ${
+                        curso.destacado
+                          ? 'bg-amber-100 text-amber-900 border-amber-300 font-bold'
+                          : 'bg-white hover:bg-zinc-100 text-zinc-600 border-zinc-200'
+                      }`}
+                      title={curso.destacado ? 'Curso actualmente recomendado en la portada' : 'Fijar este curso como recomendado en la portada'}
+                    >
+                      <Star className={`w-3 h-3 ${curso.destacado ? 'fill-amber-500 text-amber-600' : 'text-zinc-400'}`} />
+                      <span>{curso.destacado ? 'Destacado' : 'Fijar Portada'}</span>
+                    </button>
+                  </div>
 
                   <div className="flex items-center gap-1">
                     <button

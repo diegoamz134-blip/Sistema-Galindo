@@ -1,6 +1,5 @@
 import { supabase } from '@/lib/supabase';
 import { Producto, MetodoPago } from '@/types/database';
-import { MOCK_PRODUCTOS } from '@/lib/mock-data';
 
 export interface VentaItemPOS {
   producto: Producto;
@@ -55,41 +54,33 @@ export interface VentaRegistradaPOS {
  */
 export async function getPOSProducts(sedeId?: 'ica' | 'huancayo'): Promise<Producto[]> {
   try {
-    let query = supabase
+    const { data, error } = await supabase
       .from('productos')
       .select('*, categoria:categorias(*)')
       .eq('activo', true)
       .order('nombre', { ascending: true });
 
-    if (sedeId === 'huancayo') {
-      query = query.gt('stock_huancayo', 0);
-    } else if (sedeId === 'ica') {
-      query = query.or('stock_ica.gt.0,stock.gt.0');
-    }
-
-    const { data, error } = await query;
-
     if (error) {
-      console.warn('Advertencia al consultar productos de Supabase:', error.message);
-      if (!sedeId || sedeId === 'ica') return MOCK_PRODUCTOS;
+      console.warn('Error al consultar productos:', error.message);
       return [];
     }
 
-    if (data && data.length > 0) {
-      return data as Producto[];
-    }
+    if (!data || data.length === 0) return [];
 
-    // Para Huancayo si no hay stock físico registrado, no inventar datos mock de Ica
+    // Filtrar en memoria según stock de la sede
     if (sedeId === 'huancayo') {
-      return [];
+      const conStock = data.filter((p: any) => Number(p.stock_huancayo ?? 0) > 0);
+      // Si existe la columna y hay productos con stock, devolver solo esos
+      // Si la columna aún no existe (todos en 0), devolver todos activos
+      return (conStock.length > 0 ? conStock : data) as Producto[];
     }
 
-    // Si la base de datos está vacía, retornar mock como respaldo para operar en Ica
-    return MOCK_PRODUCTOS;
+    // Ica: mostrar productos con stock_ica > 0 o stock > 0
+    const conStock = data.filter((p: any) => Number(p.stock_ica ?? p.stock ?? 0) > 0);
+    return (conStock.length > 0 ? conStock : data) as Producto[];
   } catch (err) {
     console.error('Error al cargar productos para POS:', err);
-    if (sedeId === 'huancayo') return [];
-    return MOCK_PRODUCTOS;
+    return [];
   }
 }
 
@@ -116,24 +107,27 @@ export async function procesarVentaPOS(
     }
 
     // 1. Insertar el Pedido en Supabase
+    const pedidoPayload: Record<string, any> = {
+      codigo_pedido: venta.codigoPedido,
+      cliente_nombre: venta.clienteNombre.trim() || 'Cliente Mostrador',
+      cliente_telefono: venta.clienteTelefono?.trim() || '',
+      cliente_dni: venta.clienteDni?.trim() || '',
+      ciudad: ciudad,
+      sede_id: venta.sedeId, // Guardar sede_id para filtros futuros
+      metodo_entrega: 'RECOJO_SEDE',
+      metodo_pago: venta.metodoPago,
+      estado: 'ENTREGADO',
+      subtotal: venta.subtotal,
+      costo_envio: 0.0,
+      descuento: venta.descuento,
+      total: venta.total,
+      es_alumno: venta.esAlumno,
+      notas: detallePagoTexto,
+    };
+
     const { data: pedidoData, error: pedidoError } = await supabase
       .from('pedidos')
-      .insert({
-        codigo_pedido: venta.codigoPedido,
-        cliente_nombre: venta.clienteNombre.trim() || 'Cliente Mostrador',
-        cliente_telefono: venta.clienteTelefono?.trim() || '',
-        cliente_dni: venta.clienteDni?.trim() || '',
-        ciudad: ciudad,
-        metodo_entrega: 'RECOJO_SEDE',
-        metodo_pago: venta.metodoPago,
-        estado: 'ENTREGADO',
-        subtotal: venta.subtotal,
-        costo_envio: 0.0,
-        descuento: venta.descuento,
-        total: venta.total,
-        es_alumno: venta.esAlumno,
-        notas: detallePagoTexto,
-      })
+      .insert(pedidoPayload)
       .select('id')
       .single();
 
@@ -296,12 +290,9 @@ export async function getVentasHoyPOS(): Promise<VentaRegistradaPOS[]> {
       }));
     }
 
-    // 2. Si no hay pedidos en Supabase, leer del storage local de ventas del turno
-    if (typeof window !== 'undefined') {
-      const key = 'galindo_pos_ventas_turno';
-      const guardadas = JSON.parse(localStorage.getItem(key) || '[]');
-      return guardadas;
-    }
+    // 2. Eliminamos la lectura de localStorage para evitar datos "fantasma"
+    // cuando la base de datos se limpia o resetea.
+    return [];
 
     return [];
   } catch (err) {

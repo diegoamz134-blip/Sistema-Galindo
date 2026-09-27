@@ -39,7 +39,7 @@ import { BUSINESS_INFO, SEDES, SedeId } from '@/lib/constants';
 import { MOCK_PRODUCTOS } from '@/lib/mock-data';
 import { procesarPedidoWeb, PedidoWebItem } from '@/lib/checkout-service';
 
-type MetodoPagoCheckout = 'YAPE' | 'PLIN' | 'EFECTIVO' | 'TRANSFERENCIA' | 'MIXTO';
+type MetodoPagoCheckout = 'YAPE' | 'PLIN' | 'EFECTIVO' | 'TRANSFERENCIA';
 
 export default function CheckoutPage() {
   const {
@@ -87,12 +87,7 @@ export default function CheckoutPage() {
   const [copiadoCci, setCopiadoCci] = useState(false);
   const [codigoOrden, setCodigoOrden] = useState('GAL-2026-8492');
 
-  // Estados para Pago Cruzado (Efectivo + Digital: Yape / Plin / BCP)
-  type CanalDigitalCruzado = 'YAPE' | 'PLIN' | 'TRANSFERENCIA';
-  const [canalDigitalCruzado, setCanalDigitalCruzado] = useState<CanalDigitalCruzado>('YAPE');
-  const [montoMixtoEfectivo, setMontoMixtoEfectivo] = useState<string>('');
-  const [montoMixtoDigital, setMontoMixtoDigital] = useState<string>('');
-  const [modoEdicionCruzado, setModoEdicionCruzado] = useState<'efectivo' | 'digital'>('efectivo');
+
 
   // Estado del modal final de ticket confirmado y descarga de PDF
   const [ticketConfirmadoModal, setTicketConfirmadoModal] = useState(false);
@@ -131,72 +126,7 @@ export default function CheckoutPage() {
 
   const vueltoCalculado = Math.max(0, valorBillete - totalCalculado);
 
-  // Cálculos para Pago Cruzado (Efectivo + Digital)
-  const mitadPorDefecto = Number((totalCalculado / 2).toFixed(2));
 
-  let numEfectivo: number;
-  let numDigital: number;
-
-  if (modoEdicionCruzado === 'digital') {
-    const dVal = parseFloat(montoMixtoDigital);
-    if (isNaN(dVal) || montoMixtoDigital === '') {
-      numDigital = mitadPorDefecto;
-      numEfectivo = Number((totalCalculado - numDigital).toFixed(2));
-    } else {
-      numDigital = Math.min(totalCalculado, Math.max(0, dVal));
-      numEfectivo = Math.max(0, Number((totalCalculado - numDigital).toFixed(2)));
-    }
-  } else {
-    const eVal = parseFloat(montoMixtoEfectivo);
-    if (isNaN(eVal) || montoMixtoEfectivo === '') {
-      numEfectivo = mitadPorDefecto;
-      numDigital = Number((totalCalculado - numEfectivo).toFixed(2));
-    } else {
-      numEfectivo = Math.min(totalCalculado, Math.max(0, eVal));
-      numDigital = Math.max(0, Number((totalCalculado - numEfectivo).toFixed(2)));
-    }
-  }
-
-  const handleCambioEfectivo = (val: string) => {
-    setMontoMixtoEfectivo(val);
-    setModoEdicionCruzado('efectivo');
-    const num = parseFloat(val);
-    if (!isNaN(num)) {
-      const clamped = Math.min(totalCalculado, Math.max(0, num));
-      setMontoMixtoDigital(Math.max(0, Number((totalCalculado - clamped).toFixed(2))).toString());
-    } else {
-      setMontoMixtoDigital('');
-    }
-  };
-
-  const handleCambioDigital = (val: string) => {
-    setMontoMixtoDigital(val);
-    setModoEdicionCruzado('digital');
-    const num = parseFloat(val);
-    if (!isNaN(num)) {
-      const clamped = Math.min(totalCalculado, Math.max(0, num));
-      setMontoMixtoEfectivo(Math.max(0, Number((totalCalculado - clamped).toFixed(2))).toString());
-    } else {
-      setMontoMixtoEfectivo('');
-    }
-  };
-
-  const handlePresetCruzado = (tipo: '50' | 'efectivo' | 'digital') => {
-    if (tipo === '50') {
-      const mitad = Number((totalCalculado / 2).toFixed(2));
-      setMontoMixtoEfectivo(mitad.toString());
-      setMontoMixtoDigital(Number((totalCalculado - mitad).toFixed(2)).toString());
-      setModoEdicionCruzado('efectivo');
-    } else if (tipo === 'efectivo') {
-      setMontoMixtoEfectivo(totalCalculado.toString());
-      setMontoMixtoDigital('0');
-      setModoEdicionCruzado('efectivo');
-    } else {
-      setMontoMixtoEfectivo('0');
-      setMontoMixtoDigital(totalCalculado.toString());
-      setModoEdicionCruzado('digital');
-    }
-  };
 
   const handleCopiarTexto = (texto: string, tipo: 'yape' | 'bcp' | 'cci') => {
     if (typeof navigator !== 'undefined') {
@@ -304,13 +234,7 @@ export default function CheckoutPage() {
         metodoEntrega: 'RECOJO_SEDE',
         metodoPago,
         detallesPago:
-          metodoPago === 'MIXTO'
-            ? {
-                efectivo: numEfectivo,
-                digital: numDigital,
-                canalDigital: canalDigitalCruzado,
-              }
-            : metodoPago === 'EFECTIVO'
+          metodoPago === 'EFECTIVO'
             ? {
                 efectivo: typeof valorBillete === 'number' ? valorBillete : totalCalculado,
                 vuelto: vueltoCalculado,
@@ -353,24 +277,9 @@ export default function CheckoutPage() {
     });
 
     mensaje += `\n*TOTAL A PAGAR:* S/ ${totalCalculado.toFixed(2)}\n`;
-    if (metodoPago === 'MIXTO') {
-      const nombreCanal =
-        canalDigitalCruzado === 'TRANSFERENCIA'
-          ? 'Transferencia BCP'
-          : canalDigitalCruzado;
-      mensaje += `*MÉTODO DE PAGO:* PAGO CRUZADO (Efectivo + ${nombreCanal})\n`;
-      mensaje += `💵 *Parte en Efectivo (Mostrador):* S/ ${numEfectivo.toFixed(2)}\n`;
-      mensaje += `📱 *Parte por ${nombreCanal}:* S/ ${numDigital.toFixed(2)}`;
-      if (canalDigitalCruzado === 'TRANSFERENCIA') {
-        mensaje += ` (A cuenta BCP: ${BUSINESS_INFO.bcpAccount} - ${BUSINESS_INFO.bcpHolder})\n`;
-      } else {
-        mensaje += ` (Al ${BUSINESS_INFO.yapeNumber} - ${BUSINESS_INFO.yapeHolder})\n`;
-      }
-    } else {
-      mensaje += `*MÉTODO DE PAGO:* ${metodoPago}\n`;
-      if (metodoPago === 'EFECTIVO' && vueltoCalculado > 0) {
-        mensaje += `*PAGA CON:* S/ ${valorBillete.toFixed(2)} (Vuelto requerido: S/ ${vueltoCalculado.toFixed(2)})\n`;
-      }
+    mensaje += `*MÉTODO DE PAGO:* ${metodoPago}\n`;
+    if (metodoPago === 'EFECTIVO' && vueltoCalculado > 0) {
+      mensaje += `*PAGA CON:* S/ ${valorBillete.toFixed(2)} (Vuelto requerido: S/ ${vueltoCalculado.toFixed(2)})\n`;
     }
     mensaje += `\n*PUNTO DE RECOJO SELECCIONADO:*\n`;
     mensaje += `🏢 *${sedeActual.nombre.toUpperCase()}*\n`;
@@ -604,7 +513,7 @@ export default function CheckoutPage() {
                     2
                   </div>
                   <h2 className="text-xs font-bold uppercase tracking-wider text-zinc-950">
-                    Datos del Barbero / Comprador
+                    Datos del Comprador
                   </h2>
                 </div>
                 <span className="text-[10px] text-zinc-400 font-mono">Para rotular tu paquete</span>
@@ -713,32 +622,7 @@ export default function CheckoutPage() {
                 </div>
               </div>
 
-              {/* Botones rápidos de notas ("Chips juguetones") */}
-              <div className="pt-2 border-t border-zinc-100 space-y-1.5">
-                <span className="text-[10px] uppercase font-mono tracking-wider text-zinc-400 block">
-                  Toques rápidos para tu pedido:
-                </span>
-                <div className="flex flex-wrap gap-1.5">
-                  {TAGS_BARBERO.map((tag) => {
-                    const estaActivo = notas.includes(tag);
-                    return (
-                      <button
-                        key={tag}
-                        type="button"
-                        onClick={() => handleToggleTag(tag)}
-                        className={`text-[11px] px-2.5 py-1 rounded-lg border transition-all cursor-pointer flex items-center gap-1.5 ${
-                          estaActivo
-                            ? 'bg-zinc-900 text-white border-black font-semibold'
-                            : 'bg-zinc-50 text-zinc-700 border-zinc-200 hover:bg-zinc-100'
-                        }`}
-                      >
-                        {estaActivo && <Check className="w-3 h-3 text-emerald-400" />}
-                        <span>{tag}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
+
             </motion.div>
 
             {/* SECCIÓN 3: Método de Pago Interactivo & Simulador */}
@@ -761,7 +645,7 @@ export default function CheckoutPage() {
               </div>
 
               {/* Selector de Métodos de Pago */}
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5">
+              <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
                 {/* Yape */}
                 <button
                   type="button"
@@ -862,30 +746,7 @@ export default function CheckoutPage() {
                   )}
                 </button>
 
-                {/* Pago Cruzado (Mixto: Efectivo + Yape) */}
-                <button
-                  type="button"
-                  onClick={() => setMetodoPago('MIXTO')}
-                  className={`col-span-2 sm:col-span-1 p-3.5 rounded-xl border text-center transition-all flex flex-col items-center justify-center gap-1.5 cursor-pointer relative ${
-                    metodoPago === 'MIXTO'
-                      ? 'border-indigo-600 bg-indigo-950 text-white shadow-md'
-                      : 'border-zinc-200 bg-zinc-50/60 text-zinc-700 hover:bg-zinc-50 hover:border-zinc-300'
-                  }`}
-                >
-                  <ArrowLeftRight className={`w-5 h-5 ${metodoPago === 'MIXTO' ? 'text-indigo-400' : 'text-indigo-600'}`} />
-                  <span className="text-xs font-bold block">Pago Cruzado</span>
-                  <span className={`text-[10px] font-mono ${metodoPago === 'MIXTO' ? 'text-indigo-200' : 'text-zinc-400'}`}>
-                    Efectivo + Digital
-                  </span>
-                  {metodoPago === 'MIXTO' && (
-                    <motion.div
-                      layoutId="check-payment"
-                      className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-emerald-500 rounded-full flex items-center justify-center text-white shadow"
-                    >
-                      <Check className="w-2.5 h-2.5" />
-                    </motion.div>
-                  )}
-                </button>
+
               </div>
 
               {/* SIMULADOR INTERACTIVO SEGÚN EL MÉTODO */}
@@ -1074,275 +935,7 @@ export default function CheckoutPage() {
                     </div>
                   )}
 
-                  {/* CASO: PAGO CRUZADO (EFECTIVO + DIGITAL) */}
-                  {metodoPago === 'MIXTO' && (
-                    <div className="space-y-4">
-                      {/* Cabecera explicativa */}
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-zinc-200 pb-3">
-                        <div>
-                          <div className="flex items-center gap-2 text-zinc-950 font-bold text-sm">
-                            <ArrowLeftRight className="w-4 h-4 text-indigo-600" />
-                            <span>Pago Combinado / Cruzado</span>
-                          </div>
-                          <p className="text-[11px] text-zinc-500 mt-0.5">
-                            Indica cuánto pagas en efectivo y cuánto de forma digital (Yape, Plin o Transferencia).
-                          </p>
-                        </div>
-                        <div className="bg-indigo-50 border border-indigo-200 px-3 py-1 rounded-xl text-left sm:text-right self-start sm:self-auto">
-                          <span className="text-[10px] uppercase font-bold text-indigo-700 tracking-wider block">
-                            Total a Cubrir
-                          </span>
-                          <span className="text-sm font-black font-mono text-indigo-950">
-                            {formatCurrency(totalCalculado)}
-                          </span>
-                        </div>
-                      </div>
 
-                      {/* Botones de atajo rápido */}
-                      <div className="flex flex-wrap items-center gap-2 pt-0.5">
-                        <span className="text-[11px] font-bold text-zinc-500 mr-1">Reparto rápido:</span>
-                        <button
-                          type="button"
-                          onClick={() => handlePresetCruzado('50')}
-                          className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-white hover:bg-zinc-100 border border-zinc-300 text-zinc-800 transition-colors cursor-pointer shadow-2xs"
-                        >
-                          Mitad y Mitad (50% / 50%)
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handlePresetCruzado('efectivo')}
-                          className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-white hover:bg-zinc-100 border border-zinc-300 text-zinc-800 transition-colors cursor-pointer shadow-2xs"
-                        >
-                          Pagar Todo en Efectivo
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handlePresetCruzado('digital')}
-                          className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-white hover:bg-zinc-100 border border-zinc-300 text-zinc-800 transition-colors cursor-pointer shadow-2xs"
-                        >
-                          Pagar Todo Digital
-                        </button>
-                      </div>
-
-                      {/* Las 2 Cajas Principales: PARTE 1 (EFECTIVO) y PARTE 2 (DIGITAL) */}
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
-                        {/* CAJA 1: EFECTIVO */}
-                        <div className="p-4 rounded-2xl bg-white border-2 border-emerald-500/40 shadow-xs space-y-3">
-                          <div className="flex items-center gap-2">
-                            <div className="w-7 h-7 rounded-lg bg-emerald-100 text-emerald-800 flex items-center justify-center">
-                              <Banknote className="w-4 h-4" />
-                            </div>
-                            <div>
-                              <span className="text-xs font-black uppercase tracking-wider text-emerald-950 block">
-                                1. Pago en Efectivo
-                              </span>
-                              <span className="text-[10px] text-zinc-500">Pagas en mostrador al recoger</span>
-                            </div>
-                          </div>
-
-                          <div>
-                            <label className="text-xs font-bold text-zinc-800 block mb-1">
-                              ¿Cuánto pagarás en efectivo?
-                            </label>
-                            <div className="relative">
-                              <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-sm font-black text-zinc-400">
-                                S/
-                              </span>
-                              <input
-                                type="number"
-                                min="0"
-                                max={totalCalculado}
-                                step="any"
-                                value={modoEdicionCruzado === 'efectivo' ? montoMixtoEfectivo : numEfectivo}
-                                onChange={(e) => handleCambioEfectivo(e.target.value)}
-                                placeholder="0.00"
-                                className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-zinc-300 text-zinc-950 font-mono font-black text-base focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600 outline-none bg-zinc-50/50"
-                              />
-                            </div>
-                          </div>
-
-                          <div className="p-2.5 rounded-xl bg-emerald-50/70 border border-emerald-200 text-xs text-emerald-900">
-                            Pagas en mostrador: <strong className="font-mono font-bold">S/ {numEfectivo.toFixed(2)}</strong>
-                          </div>
-                        </div>
-
-                        {/* CAJA 2: DIGITAL (YAPE / PLIN / BCP) */}
-                        <div className="p-4 rounded-2xl bg-white border-2 border-purple-500/40 shadow-xs space-y-3">
-                          <div className="flex items-center gap-2">
-                            <div className="w-7 h-7 rounded-lg bg-purple-100 text-purple-800 flex items-center justify-center">
-                              <Smartphone className="w-4 h-4" />
-                            </div>
-                            <div>
-                              <span className="text-xs font-black uppercase tracking-wider text-purple-950 block">
-                                2. Pago Digital
-                              </span>
-                              <span className="text-[10px] text-zinc-500">Yape, Plin o Transferencia</span>
-                            </div>
-                          </div>
-
-                          {/* Selector de Canal Digital */}
-                          <div>
-                            <label className="text-xs font-bold text-zinc-800 block mb-1">
-                              ¿Por qué medio digital pagarás?
-                            </label>
-                            <div className="grid grid-cols-3 gap-1.5">
-                              <button
-                                type="button"
-                                onClick={() => setCanalDigitalCruzado('YAPE')}
-                                className={`py-1.5 px-2 rounded-lg text-xs font-bold transition-colors cursor-pointer border text-center ${
-                                  canalDigitalCruzado === 'YAPE'
-                                    ? 'bg-purple-700 text-white border-purple-700 shadow-xs'
-                                    : 'bg-zinc-50 text-zinc-700 border-zinc-200 hover:bg-zinc-100'
-                                }`}
-                              >
-                                Yape
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => setCanalDigitalCruzado('PLIN')}
-                                className={`py-1.5 px-2 rounded-lg text-xs font-bold transition-colors cursor-pointer border text-center ${
-                                  canalDigitalCruzado === 'PLIN'
-                                    ? 'bg-cyan-700 text-white border-cyan-700 shadow-xs'
-                                    : 'bg-zinc-50 text-zinc-700 border-zinc-200 hover:bg-zinc-100'
-                                }`}
-                              >
-                                Plin
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => setCanalDigitalCruzado('TRANSFERENCIA')}
-                                className={`py-1.5 px-2 rounded-lg text-xs font-bold transition-colors cursor-pointer border text-center ${
-                                  canalDigitalCruzado === 'TRANSFERENCIA'
-                                    ? 'bg-blue-700 text-white border-blue-700 shadow-xs'
-                                    : 'bg-zinc-50 text-zinc-700 border-zinc-200 hover:bg-zinc-100'
-                                }`}
-                              >
-                                BCP Soles
-                              </button>
-                            </div>
-                          </div>
-
-                          {/* Input de Monto Digital */}
-                          <div>
-                            <label className="text-xs font-bold text-zinc-800 block mb-1">
-                              Monto a pagar por {canalDigitalCruzado === 'TRANSFERENCIA' ? 'Transferencia BCP' : canalDigitalCruzado}:
-                            </label>
-                            <div className="relative">
-                              <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-sm font-black text-zinc-400">
-                                S/
-                              </span>
-                              <input
-                                type="number"
-                                min="0"
-                                max={totalCalculado}
-                                step="any"
-                                value={modoEdicionCruzado === 'digital' ? montoMixtoDigital : numDigital}
-                                onChange={(e) => handleCambioDigital(e.target.value)}
-                                placeholder="0.00"
-                                className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-zinc-300 text-zinc-950 font-mono font-black text-base focus:border-purple-600 focus:ring-1 focus:ring-purple-600 outline-none bg-zinc-50/50"
-                              />
-                            </div>
-                          </div>
-
-                          {/* Datos Oficiales del Medio Digital Seleccionado */}
-                          <div className="p-2.5 rounded-xl bg-zinc-50 border border-zinc-200 text-xs space-y-1.5">
-                            {canalDigitalCruzado === 'YAPE' && (
-                              <>
-                                <div className="flex items-center justify-between">
-                                  <span className="text-zinc-600 font-medium text-[11px]">Número Oficial de Yape:</span>
-                                  <span className="font-mono font-black text-zinc-950 bg-white px-2 py-0.5 rounded border border-zinc-300">
-                                    {BUSINESS_INFO.yapeNumber}
-                                  </span>
-                                </div>
-                                <div className="text-[10px] text-zinc-500">
-                                  Titular: <strong>{BUSINESS_INFO.yapeHolder}</strong>
-                                </div>
-                                <button
-                                  type="button"
-                                  onClick={() => handleCopiarTexto(BUSINESS_INFO.yapeNumber, 'yape')}
-                                  className="w-full py-1.5 rounded-lg bg-white border border-purple-300 text-purple-950 hover:border-purple-600 font-bold text-xs flex items-center justify-center gap-1 cursor-pointer transition-colors"
-                                >
-                                  {copiadoYape ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
-                                  <span>{copiadoYape ? '¡Número Copiado!' : `Copiar ${BUSINESS_INFO.yapeNumber}`}</span>
-                                </button>
-                              </>
-                            )}
-
-                            {canalDigitalCruzado === 'PLIN' && (
-                              <>
-                                <div className="flex items-center justify-between">
-                                  <span className="text-zinc-600 font-medium text-[11px]">Número Oficial de Plin:</span>
-                                  <span className="font-mono font-black text-zinc-950 bg-white px-2 py-0.5 rounded border border-zinc-300">
-                                    {BUSINESS_INFO.yapeNumber}
-                                  </span>
-                                </div>
-                                <div className="text-[10px] text-zinc-500">
-                                  Titular: <strong>{BUSINESS_INFO.yapeHolder}</strong>
-                                </div>
-                                <button
-                                  type="button"
-                                  onClick={() => handleCopiarTexto(BUSINESS_INFO.yapeNumber, 'yape')}
-                                  className="w-full py-1.5 rounded-lg bg-white border border-cyan-300 text-cyan-950 hover:border-cyan-600 font-bold text-xs flex items-center justify-center gap-1 cursor-pointer transition-colors"
-                                >
-                                  {copiadoYape ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
-                                  <span>{copiadoYape ? '¡Número Copiado!' : `Copiar ${BUSINESS_INFO.yapeNumber}`}</span>
-                                </button>
-                              </>
-                            )}
-
-                            {canalDigitalCruzado === 'TRANSFERENCIA' && (
-                              <>
-                                <div className="flex items-center justify-between">
-                                  <span className="text-zinc-600 font-medium text-[11px]">Cuenta BCP Soles:</span>
-                                  <span className="font-mono font-black text-zinc-950 bg-white px-1.5 py-0.5 rounded border border-zinc-300 text-[11px]">
-                                    {BUSINESS_INFO.bcpAccount}
-                                  </span>
-                                </div>
-                                <div className="flex items-center justify-between text-[10px] text-zinc-500 font-mono">
-                                  <span>CCI:</span>
-                                  <span>{BUSINESS_INFO.bcpCci}</span>
-                                </div>
-                                <div className="text-[10px] text-zinc-500">
-                                  Titular: <strong>{BUSINESS_INFO.bcpHolder}</strong>
-                                </div>
-                                <div className="grid grid-cols-2 gap-1.5 pt-0.5">
-                                  <button
-                                    type="button"
-                                    onClick={() => handleCopiarTexto(BUSINESS_INFO.bcpAccount, 'bcp')}
-                                    className="py-1 px-1.5 rounded-lg bg-white border border-zinc-300 hover:border-black font-semibold text-[10px] text-zinc-800 flex items-center justify-center gap-1 cursor-pointer"
-                                  >
-                                    {copiadoBcp ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
-                                    <span>{copiadoBcp ? '¡Copiado!' : 'Copiar Cuenta'}</span>
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleCopiarTexto(BUSINESS_INFO.bcpCci.replace(/-/g, ''), 'cci')}
-                                    className="py-1 px-1.5 rounded-lg bg-white border border-zinc-300 hover:border-black font-semibold text-[10px] text-zinc-800 flex items-center justify-center gap-1 cursor-pointer"
-                                  >
-                                    {copiadoCci ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
-                                    <span>{copiadoCci ? '¡CCI Copiado!' : 'Copiar CCI'}</span>
-                                  </button>
-                                </div>
-                              </>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Resumen Total y Cuadre de Pago */}
-                      <div className="p-3 rounded-xl bg-indigo-50/70 border border-indigo-200 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs">
-                        <div className="flex items-center gap-2 text-indigo-950 font-bold">
-                          <Check className="w-4 h-4 text-emerald-600 shrink-0" />
-                          <span>
-                            Resumen: S/ {numEfectivo.toFixed(2)} (Efectivo) + S/ {numDigital.toFixed(2)} ({canalDigitalCruzado === 'TRANSFERENCIA' ? 'BCP' : canalDigitalCruzado})
-                          </span>
-                        </div>
-                        <div className="font-mono font-black text-indigo-950 text-sm">
-                          = Total {formatCurrency(totalCalculado)}
-                        </div>
-                      </div>
-                    </div>
-                  )}
                 </motion.div>
               </AnimatePresence>
             </motion.div>
@@ -1379,11 +972,7 @@ export default function CheckoutPage() {
                   {sedeActual.nombre.toUpperCase()} • TICKET #{codigoOrden}
                 </p>
 
-                {/* Sello animado de verificación */}
-                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/10 text-[10px] font-mono tracking-wider uppercase border border-white/20">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
-                  <span>Listo para Mostrador</span>
-                </div>
+
               </div>
 
               {/* Perforación de papel con muescas circulares */}
@@ -1460,24 +1049,9 @@ export default function CheckoutPage() {
                   <div className="flex justify-between text-zinc-600">
                     <span>Método de Pago:</span>
                     <span className="font-bold text-zinc-950">
-                      {metodoPago === 'MIXTO'
-                        ? `PAGO CRUZADO (Efectivo + ${canalDigitalCruzado === 'TRANSFERENCIA' ? 'BCP' : canalDigitalCruzado})`
-                        : metodoPago}
+                      {metodoPago}
                     </span>
                   </div>
-
-                  {metodoPago === 'MIXTO' && (
-                    <div className="py-2 px-2.5 rounded bg-zinc-50 border border-zinc-200 text-[10px] space-y-1 font-mono">
-                      <div className="flex justify-between text-emerald-800 font-bold">
-                        <span>💵 Efectivo en Caja:</span>
-                        <span>S/ {numEfectivo.toFixed(2)}</span>
-                      </div>
-                      <div className="flex justify-between text-purple-800 font-bold">
-                        <span>📱 Por {canalDigitalCruzado === 'TRANSFERENCIA' ? 'BCP Soles' : canalDigitalCruzado}:</span>
-                        <span>S/ {numDigital.toFixed(2)}</span>
-                      </div>
-                    </div>
-                  )}
 
                   {metodoPago === 'EFECTIVO' && billeteEfectivo !== 'exacto' && (
                     <div className="flex justify-between text-zinc-600 text-[11px]">
@@ -1496,22 +1070,6 @@ export default function CheckoutPage() {
                   </div>
                 </div>
 
-                {/* Código de Barras de Barbería con Láser Animado */}
-                <div className="pt-3 text-center space-y-1.5 border-t border-dashed border-zinc-300 relative overflow-hidden">
-                  <div className="relative font-mono text-2xl tracking-[0.28em] text-zinc-900 select-none font-black opacity-85 py-1">
-                    ||| | |||| || | ||||| | ||| ||
-                    {/* Efecto láser sutil de scanner (ignorado en PDF) */}
-                    <motion.div
-                      data-ignore-pdf="true"
-                      animate={{ x: [-120, 120] }}
-                      transition={{ repeat: Infinity, duration: 2.2, ease: 'easeInOut' }}
-                      className="absolute inset-y-0 w-1 bg-red-500/50 shadow-[0_0_8px_rgba(239,68,68,0.8)] pointer-events-none left-1/2"
-                    />
-                  </div>
-                  <p className="text-[9px] font-mono text-zinc-500 tracking-wider">
-                    PRESENTE ESTE TICKET EN MOSTRADOR O POR WHATSAPP
-                  </p>
-                </div>
 
                 {/* Alerta de Error si faltan datos o falla el guardado */}
                 {errorPedido && (
@@ -1560,28 +1118,11 @@ export default function CheckoutPage() {
                         <span>Registrando en el Sistema...</span>
                       </>
                     ) : (
-                      <>
-                        <Ticket className="w-4 h-4" />
-                        <span>Confirmar & Emitir Ticket</span>
-                      </>
+                      <span>Finalizar Compra</span>
                     )}
                   </motion.button>
 
-                  <button
-                    type="button"
-                    onClick={handleDescargarPDF}
-                    disabled={generandoPdf}
-                    className="w-full py-2.5 rounded-xl font-bold text-xs bg-zinc-100 hover:bg-zinc-200 text-zinc-900 border border-zinc-300 transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-95 disabled:opacity-50"
-                  >
-                    <Download className="w-4 h-4 text-zinc-700" />
-                    <span>
-                      {generandoPdf
-                        ? 'Generando PDF Oficial...'
-                        : pdfDescargado
-                        ? '¡Ticket Descargado con Éxito!'
-                        : 'Descargar Ticket en PDF'}
-                    </span>
-                  </button>
+
                 </div>
 
                 <p data-ignore-pdf="true" className="text-[10px] text-zinc-500 text-center leading-relaxed">
@@ -1608,7 +1149,6 @@ export default function CheckoutPage() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              onClick={() => setTicketConfirmadoModal(false)}
               className="fixed inset-0 bg-black/60 backdrop-blur-xs"
             />
 
@@ -1620,23 +1160,38 @@ export default function CheckoutPage() {
               transition={{ type: 'spring', damping: 25, stiffness: 300 }}
               className="relative bg-white rounded-3xl shadow-2xl max-w-md w-full p-6 border-2 border-zinc-900 text-center space-y-5 z-10"
             >
-              {/* Icono de Barbería y Éxito */}
-              <div className="w-16 h-16 rounded-2xl bg-zinc-950 text-white flex items-center justify-center mx-auto shadow-lg relative">
-                <Scissors className="w-8 h-8 text-white rotate-45" />
-                <div className="absolute -top-1.5 -right-1.5 w-6 h-6 rounded-full bg-emerald-500 text-white flex items-center justify-center border-2 border-white shadow">
-                  <Check className="w-3.5 h-3.5 stroke-[3]" />
-                </div>
-              </div>
+              {/* Icono de Éxito Premium */}
+              <motion.div 
+                initial={{ scale: 0 }}
+                animate={{ scale: 1 }}
+                transition={{ type: "spring", stiffness: 260, damping: 20 }}
+                className="w-20 h-20 rounded-full bg-gradient-to-tr from-emerald-500 to-emerald-400 text-white flex items-center justify-center mx-auto shadow-[0_10px_40px_rgba(16,185,129,0.4)] relative mb-2 mt-4"
+              >
+                <motion.div
+                  initial={{ scale: 0 }}
+                  animate={{ scale: 1 }}
+                  transition={{ delay: 0.2, type: "spring", stiffness: 200, damping: 15 }}
+                >
+                  <Check className="w-10 h-10 stroke-[3]" />
+                </motion.div>
+                {/* Ping ring */}
+                <motion.div 
+                  className="absolute inset-0 rounded-full border-2 border-emerald-400"
+                  initial={{ scale: 1, opacity: 1 }}
+                  animate={{ scale: 1.5, opacity: 0 }}
+                  transition={{ duration: 1.2, ease: "easeOut", delay: 0.2 }}
+                />
+              </motion.div>
 
               <div>
-                <span className="text-[10px] font-mono uppercase tracking-widest text-zinc-400 block font-bold">
-                  ¡Orden Generada con Éxito!
+                <span className="text-[10px] font-mono uppercase tracking-widest text-emerald-600 block font-bold">
+                  ¡OPERACIÓN EXITOSA!
                 </span>
-                <h3 className="text-xl font-black text-zinc-950 uppercase tracking-tight mt-1">
-                  Ticket de Recojo Oficial
+                <h3 className="text-2xl font-black text-zinc-950 uppercase tracking-tight mt-1">
+                  Compra Confirmada
                 </h3>
-                <p className="text-xs text-zinc-600 mt-1">
-                  Tu pedido está reservado para ti en nuestra {sedeActual.nombre} ({sedeActual.direccion}).
+                <p className="text-xs text-zinc-600 mt-1.5">
+                  ¡Genial! Tu pedido ya está registrado y separado para ti en <strong className="text-zinc-900">{sedeActual.nombre}</strong>.
                 </p>
               </div>
 
@@ -1659,9 +1214,7 @@ export default function CheckoutPage() {
                 <div className="flex justify-between">
                   <span className="text-zinc-500">PAGO:</span>
                   <span className="text-zinc-900 font-bold">
-                    {metodoPago === 'MIXTO'
-                      ? `PAGO CRUZADO (S/ ${numEfectivo.toFixed(2)} Efectivo + S/ ${numDigital.toFixed(2)} ${canalDigitalCruzado === 'TRANSFERENCIA' ? 'BCP' : canalDigitalCruzado})`
-                      : metodoPago}
+                    {metodoPago}
                   </span>
                 </div>
                 <div className="flex justify-between">

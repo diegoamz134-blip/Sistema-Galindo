@@ -22,6 +22,7 @@ import {
   getMatriculasConDetalle,
   getAdminCursos,
   toggleCursoActivo,
+  marcarCursoDestacado,
   eliminarCurso,
   eliminarTodosLosCursos,
   calcularEstadisticas,
@@ -230,6 +231,18 @@ export default function AdminMatriculasPage() {
       prev.map((c) => (c.id === cursoId ? { ...c, activo: nuevoEstado } : c))
     );
     await toggleCursoActivo(cursoId, nuevoEstado);
+    cargarDatos(true);
+  };
+
+  // Handler para marcar curso recomendado en portada
+  const handleMarcarDestacado = async (cursoId: string) => {
+    setCursos((prev) =>
+      prev.map((c) => ({
+        ...c,
+        destacado: c.id === cursoId,
+      }))
+    );
+    await marcarCursoDestacado(cursoId);
     cargarDatos(true);
   };
 
@@ -658,6 +671,7 @@ export default function AdminMatriculasPage() {
             setShowModalCurso(true);
           }}
           onToggleActivo={handleToggleCursoActivo}
+          onMarcarDestacado={handleMarcarDestacado}
           onEliminarCurso={handleEliminarCurso}
           onVaciarCursos={handleVaciarCursos}
         />

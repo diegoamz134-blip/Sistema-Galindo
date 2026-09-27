@@ -85,6 +85,7 @@ export function DetallePedidoModal({
   const [modoEdicion, setModoEdicion] = useState(false);
 
   // Formulario de Inscripción / Formalización
+  const [formTipoDocumento, setFormTipoDocumento] = useState<'DNI' | 'CE'>('DNI');
   const [formDni, setFormDni] = useState('');
   const [formNombres, setFormNombres] = useState('');
   const [formApellidos, setFormApellidos] = useState('');
@@ -1281,17 +1282,30 @@ export function DetallePedidoModal({
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                       <div>
                         <label className="text-[10px] font-bold text-zinc-500 block mb-1">
-                          DNI del Alumno <span className="text-rose-500">*</span>
+                          Documento <span className="text-rose-500">*</span>
                         </label>
-                        <input
-                          type="text"
-                          required
-                          maxLength={8}
-                          value={formDni}
-                          onChange={(e) => setFormDni(e.target.value.replace(/\D/g, ''))}
-                          placeholder="8 dígitos"
-                          className="w-full px-3 py-2 rounded-xl border border-zinc-200 bg-white text-xs font-mono font-bold focus:border-black outline-none"
-                        />
+                        <div className="flex bg-white rounded-xl border border-zinc-200 focus-within:border-black overflow-hidden">
+                          <select
+                            value={formTipoDocumento}
+                            onChange={(e) => {
+                              setFormTipoDocumento(e.target.value as 'DNI' | 'CE');
+                              setFormDni('');
+                            }}
+                            className="bg-zinc-50 border-r border-zinc-200 text-xs font-bold px-2 py-2 outline-none cursor-pointer text-zinc-700 hover:bg-zinc-100 transition-colors"
+                          >
+                            <option value="DNI">DNI</option>
+                            <option value="CE">CE</option>
+                          </select>
+                          <input
+                            type="text"
+                            required
+                            maxLength={formTipoDocumento === 'DNI' ? 8 : 10}
+                            value={formDni}
+                            onChange={(e) => setFormDni(e.target.value.replace(/\D/g, ''))}
+                            placeholder={formTipoDocumento === 'DNI' ? '8 dígitos' : 'Max 10 dígitos'}
+                            className="w-full px-3 py-2 bg-transparent text-xs font-mono font-bold outline-none"
+                          />
+                        </div>
                       </div>
 
                       <div>

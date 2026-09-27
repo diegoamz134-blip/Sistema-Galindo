@@ -63,17 +63,24 @@ export interface EstadisticasPedidos {
 /**
  * Normaliza un pedido bruto de Supabase deduciendo su canal y sede
  */
-function inferirCanalYSede(row: any, items: PedidoItemDetallado[] = []): { canal: 'WEB_TIENDA' | 'ACADEMIA' | 'POS_MOSTRADOR'; sede: string } {
+function inferirCanalYSede(row: any, items: PedidoItemDetallado[] = []): { canal: 'WEB_TIENDA' | 'ACADEMIA' | 'POS_MOSTRADOR'; sede: string; sedeId: 'ica' | 'huancayo' } {
   const codigo = (row.codigo_pedido || '').toUpperCase();
   const notas = (row.notas || '').toLowerCase();
   const ciudad = (row.ciudad || '').toLowerCase();
 
-  // Sede
-  let sede = 'Sede Central Ica';
-  if (ciudad.includes('huancayo') || notas.includes('huancayo')) {
+  // Sede — primero respetar sede_id si existe en la fila
+  let sedeId: 'ica' | 'huancayo' = 'ica';
+  let sede = SEDES.ica.nombre;
+
+  if (row.sede_id === 'huancayo') {
+    sedeId = 'huancayo';
     sede = SEDES.huancayo.nombre;
-  } else if (ciudad.includes('ica') || notas.includes('ica')) {
+  } else if (row.sede_id === 'ica') {
+    sedeId = 'ica';
     sede = SEDES.ica.nombre;
+  } else if (ciudad.includes('huancayo') || notas.includes('huancayo')) {
+    sedeId = 'huancayo';
+    sede = SEDES.huancayo.nombre;
   }
 
   // Canal
@@ -96,7 +103,7 @@ function inferirCanalYSede(row: any, items: PedidoItemDetallado[] = []): { canal
     canal = 'WEB_TIENDA';
   }
 
-  return { canal, sede };
+  return { canal, sede, sedeId };
 }
 
 /**
@@ -183,8 +190,12 @@ export async function getPedidosAdmin(filtros?: FiltrosPedidosAdmin): Promise<Pe
       resultado = resultado.filter((p) => p.tipo_canal === filtros.canal);
     }
 
+    // Filtro de sede: comparar por sedeId inferido
     if (filtros?.sede && filtros.sede !== 'TODAS') {
-      resultado = resultado.filter((p) => p.sede_nombre.toLowerCase().includes(filtros.sede!.toLowerCase()));
+      const sedeFiltro = filtros.sede.toLowerCase(); // 'ica' o 'huancayo'
+      resultado = resultado.filter((p) =>
+        p.sede_nombre.toLowerCase().includes(sedeFiltro)
+      );
     }
 
     if (filtros?.fecha && filtros.fecha !== 'TODAS') {
@@ -218,11 +229,13 @@ export async function getPedidosAdmin(filtros?: FiltrosPedidosAdmin): Promise<Pe
 }
 
 /**
- * Obtener métricas y KPIs de pedidos
+ * Obtener métricas y KPIs de pedidos filtrados por sede
  */
-export async function getEstadisticasPedidos(): Promise<EstadisticasPedidos> {
+export async function getEstadisticasPedidos(sedeId?: string): Promise<EstadisticasPedidos> {
   try {
-    const pedidos = await getPedidosAdmin();
+    // Pasar el filtro de sede para que las stats sean consistentes con la lista
+    const filtros = sedeId ? { sede: sedeId === 'ica' ? 'Ica' : 'Huancayo' } as FiltrosPedidosAdmin : undefined;
+    const pedidos = await getPedidosAdmin(filtros);
     const pendientes = pedidos.filter((p) => p.estado === 'PENDIENTE').length;
     const entregados = pedidos.filter((p) => p.estado === 'ENTREGADO').length;
     const totalFacturado = pedidos
@@ -257,6 +270,7 @@ export async function getEstadisticasPedidos(): Promise<EstadisticasPedidos> {
     };
   }
 }
+
 
 /**
  * Actualizar el estado de un pedido en Supabase

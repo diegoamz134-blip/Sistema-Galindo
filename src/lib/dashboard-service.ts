@@ -40,14 +40,21 @@ export interface PaymentMethodItem {
 // -------------------------------------------------------------------------
 // Helper: Obtener ventas consolidadas (Supabase 'pedidos' + Cache local POS)
 // -------------------------------------------------------------------------
-export async function getConsolidatedSales(): Promise<any[]> {
+export async function getConsolidatedSales(sedeId?: string): Promise<any[]> {
   let dbSales: any[] = [];
 
   try {
-    const { data, error } = await supabase
+    let query = supabase
       .from('pedidos')
-      .select('id, codigo_pedido, total, subtotal, metodo_pago, estado, creado_en, cliente_nombre, notas')
+      .select('id, codigo_pedido, total, subtotal, metodo_pago, estado, creado_en, cliente_nombre, notas, sede_id')
       .order('creado_en', { ascending: false });
+
+    // Filtrar por sede si se especifica
+    if (sedeId) {
+      query = query.eq('sede_id', sedeId);
+    }
+
+    const { data, error } = await query;
 
     if (!error && data) {
       dbSales = data;
@@ -55,99 +62,37 @@ export async function getConsolidatedSales(): Promise<any[]> {
   } catch (err) {
     console.warn('Error al leer pedidos de Supabase:', err);
   }
+  // -------------------------------------------------------------------------
+  // IMPORTANTE: Se elimina la lógica de auto-sincronización desde localStorage
+  // porque "revivía" datos falsos o eliminados de la base de datos (datos fantasma).
+  // La fuente de verdad absoluta ahora es Supabase.
+  // -------------------------------------------------------------------------
 
-  // Leer ventas locales guardadas en el navegador
-  let localSales: any[] = [];
-  if (typeof window !== 'undefined') {
-    try {
-      const raw = localStorage.getItem('galindo_pos_ventas_turno');
-      if (raw) {
-        localSales = JSON.parse(raw);
-      }
-    } catch (e) {
-      console.warn('Error al leer storage local de ventas:', e);
-    }
-  }
-
-  // Si hay ventas locales que aún no están en Supabase, sincronizarlas en background
-  const codigosEnDb = new Set(dbSales.map((s) => s.codigo_pedido));
-  const missingInDb = localSales.filter((s) => !codigosEnDb.has(s.codigo_pedido));
-
-  if (missingInDb.length > 0) {
-    // Sincronizar en segundo plano
-    (async () => {
-      for (const sale of missingInDb) {
-        try {
-          const { data: newPed } = await supabase
-            .from('pedidos')
-            .insert({
-              codigo_pedido: sale.codigo_pedido,
-              cliente_nombre: sale.cliente_nombre || 'Cliente Mostrador',
-              cliente_telefono: sale.cliente_telefono || '',
-              cliente_dni: sale.cliente_dni || '',
-              ciudad: 'Ica',
-              metodo_entrega: 'RECOJO_SEDE',
-              metodo_pago: sale.metodo_pago || 'EFECTIVO',
-              estado: 'ENTREGADO',
-              subtotal: sale.total,
-              total: sale.total,
-              creado_en: sale.creado_en || new Date().toISOString(),
-            })
-            .select('id')
-            .single();
-
-          if (newPed?.id && sale.ventaCompleta?.items) {
-            const items = sale.ventaCompleta.items.map((it: any) => ({
-              pedido_id: newPed.id,
-              producto_id: it.producto?.id?.startsWith('mock-') ? null : it.producto?.id,
-              nombre_producto: it.producto?.nombre || 'Producto',
-              precio_unitario: it.precioUnitario,
-              cantidad: it.cantidad,
-              subtotal: it.subtotal,
-            }));
-            await supabase.from('pedido_items').insert(items);
-          }
-        } catch (e) {
-          // Ignore
-        }
-      }
-    })();
-  }
-
-  // Unificar sin duplicados
-  const map = new Map<string, any>();
-  dbSales.forEach((s) => map.set(s.codigo_pedido, s));
-  localSales.forEach((s) => {
-    if (!map.has(s.codigo_pedido)) {
-      map.set(s.codigo_pedido, s);
-    }
-  });
-
-  return Array.from(map.values()).sort(
-    (a, b) => new Date(b.creado_en).getTime() - new Date(a.creado_en).getTime()
-  );
+  return dbSales;
 }
 
 // -------------------------------------------------------------------------
 // 1. Obtener Métricas Generales del Dashboard (Cobros, Caja, Stock, Alumnos)
 // -------------------------------------------------------------------------
-export async function getDashboardSummary(): Promise<DashboardSummary> {
+export async function getDashboardSummary(sedeId?: string): Promise<DashboardSummary> {
   try {
-    const [productosRes, matriculasRes, ventasConsolidadas, cajasRes] = await Promise.all([
-      supabase.from('productos').select('id, stock, stock_minimo, precio_venta'),
+    const [productosRes, matriculasRes, ventasConsolidadas] = await Promise.all([
+      supabase.from('productos').select('id, stock, stock_minimo, precio_venta, stock_ica, stock_huancayo'),
       supabase.from('matriculas').select('id, estado'),
-      getConsolidatedSales(),
-      supabase.from('cajas_chicas').select('*').eq('estado', 'ABIERTA').limit(1),
+      getConsolidatedSales(sedeId),
     ]);
 
     const productos = productosRes.data || [];
     const matriculas = matriculasRes.data || [];
-    const cajaAbierta = cajasRes.data?.[0];
 
-    // Stock crítico
-    const stockCriticoCount = productos.filter(
-      (p) => Number(p.stock) <= Number(p.stock_minimo || 3)
-    ).length;
+    // Stock critico (por sede si se especifica)
+    const stockCriticoCount = productos.filter((p) => {
+      const stockSede =
+        sedeId === 'huancayo'
+          ? Number(p.stock_huancayo ?? p.stock)
+          : Number(p.stock_ica ?? p.stock);
+      return stockSede <= Number(p.stock_minimo || 3);
+    }).length;
 
     // Alumnos activos
     const alumnosActivos = matriculas.filter(
@@ -184,12 +129,6 @@ export async function getDashboardSummary(): Promise<DashboardSummary> {
       }
     });
 
-    // Si hay caja chica abierta con saldos específicos, tomar en cuenta saldo real
-    if (cajaAbierta) {
-      if (Number(cajaAbierta.total_ingresos_efectivo) > 0) {
-        efectivoCaja = Math.max(efectivoCaja, Number(cajaAbierta.saldo_teorico_efectivo || cajaAbierta.total_ingresos_efectivo));
-      }
-    }
 
     return {
       cobrosHoy,
@@ -281,31 +220,8 @@ export async function getTopProductsRanking(): Promise<TopProductItem[]> {
       // Ignore
     }
 
-    // 2. Extraer ítems de ventas locales si existen
-    let itemsFromLocal: any[] = [];
-    if (typeof window !== 'undefined') {
-      try {
-        const raw = localStorage.getItem('galindo_pos_ventas_turno');
-        if (raw) {
-          const ventas = JSON.parse(raw);
-          ventas.forEach((v: any) => {
-            if (v.ventaCompleta?.items) {
-              v.ventaCompleta.items.forEach((it: any) => {
-                itemsFromLocal.push({
-                  nombre_producto: it.producto?.nombre || 'Producto',
-                  cantidad: Number(it.cantidad || 1),
-                  subtotal: Number(it.subtotal || 0),
-                  producto_id: it.producto?.id,
-                });
-              });
-            }
-          });
-        }
-      } catch (e) {}
-    }
-
-    // Unir ítems (priorizando los de BD si hay, o los locales)
-    const todosItems = itemsFromDb.length > 0 ? itemsFromDb : itemsFromLocal;
+    // 2. Usar exclusivamente la BD, evitando datos fantasma del localStorage
+    const todosItems = itemsFromDb;
 
     // Agrupar por producto
     const mapaProductos = new Map<string, { unidades: number; ingresos: number; id: string }>();
@@ -495,13 +411,19 @@ export interface PedidoReciente {
   notas?: string;
 }
 
-export async function getRecentOrders(limit = 8): Promise<PedidoReciente[]> {
+export async function getRecentOrders(limit = 8, sedeId?: string): Promise<PedidoReciente[]> {
   try {
-    const { data, error } = await supabase
+    let query = supabase
       .from('pedidos')
-      .select('id, codigo_pedido, cliente_nombre, cliente_telefono, cliente_dni, metodo_pago, metodo_entrega, estado, total, creado_en, notas')
+      .select('id, codigo_pedido, cliente_nombre, cliente_telefono, cliente_dni, metodo_pago, metodo_entrega, estado, total, creado_en, notas, sede_id')
       .order('creado_en', { ascending: false })
       .limit(limit);
+
+    if (sedeId) {
+      query = query.eq('sede_id', sedeId);
+    }
+
+    const { data, error } = await query;
 
     if (!error && data) {
       return data as PedidoReciente[];

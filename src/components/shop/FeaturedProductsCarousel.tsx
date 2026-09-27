@@ -12,7 +12,6 @@ import {
   Pause,
   Play,
   ArrowRight,
-  Sparkles,
   Boxes,
 } from 'lucide-react';
 import { Producto } from '@/types/database';
@@ -29,60 +28,8 @@ export function FeaturedProductsCarousel({
   onAddToCart,
   onQuickView,
 }: FeaturedProductsCarouselProps) {
-  // Categoría seleccionada para filtro rápido
-  const [categoriaActiva, setCategoriaActiva] = useState<string>('TODOS');
-  
-  // Filtrado de productos (Soporta IDs de Supabase, slugs y nombres)
-  const productosFiltrados = productos.filter((prod) => {
-    if (categoriaActiva === 'TODOS') return true;
-    
-    const catSlug = (prod.categoria?.slug || '').toLowerCase();
-    const catNom = (prod.categoria?.nombre || '').toLowerCase();
-    const prodNom = (prod.nombre || '').toLowerCase();
-
-    if (categoriaActiva === 'MAQUINAS') {
-      return (
-        prod.categoria_id === 'cat-1' ||
-        prod.categoria_id === 'cat-2' ||
-        prod.categoria_id === 'cat-3' ||
-        catSlug.includes('maquina') ||
-        catSlug.includes('clipper') ||
-        catSlug.includes('patillera') ||
-        catSlug.includes('shaver') ||
-        catNom.includes('máquina') ||
-        catNom.includes('clipper') ||
-        catNom.includes('patillera') ||
-        prodNom.includes('clipper') ||
-        prodNom.includes('shaver') ||
-        prodNom.includes('trimmer') ||
-        prodNom.includes('máquina')
-      );
-    }
-    if (categoriaActiva === 'TIJERAS_ACC') {
-      return (
-        prod.categoria_id === 'cat-4' ||
-        prod.categoria_id === 'cat-5' ||
-        catSlug.includes('tijera') ||
-        catSlug.includes('accesorio') ||
-        catNom.includes('tijera') ||
-        catNom.includes('accesorio') ||
-        prodNom.includes('tijera') ||
-        prodNom.includes('navaja') ||
-        prodNom.includes('peine') ||
-        prodNom.includes('capa')
-      );
-    }
-    if (categoriaActiva === 'KITS') {
-      return (
-        prod.categoria_id === 'cat-7' ||
-        catSlug.includes('kit') ||
-        catNom.includes('kit') ||
-        prodNom.includes('kit') ||
-        prodNom.includes('combo')
-      );
-    }
-    return true;
-  });
+  // Lista directa de productos para el carrusel
+  const productosFiltrados = productos;
 
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
@@ -94,9 +41,9 @@ export function FeaturedProductsCarousel({
   useEffect(() => {
     const handleResize = () => {
       if (window.innerWidth < 640) {
-        setItemsPerPage(1);
-      } else if (window.innerWidth < 1024) {
         setItemsPerPage(2);
+      } else if (window.innerWidth < 1024) {
+        setItemsPerPage(3);
       } else {
         setItemsPerPage(3);
       }
@@ -110,12 +57,12 @@ export function FeaturedProductsCarousel({
   const totalCards = productosFiltrados.length;
   const maxIndex = Math.max(0, totalCards - itemsPerPage);
 
-  // Reiniciar índice si cambiamos filtro y el índice excede el nuevo máximo
+  // Reiniciar índice si el índice excede el nuevo máximo
   useEffect(() => {
     if (currentIndex > maxIndex) {
       setCurrentIndex(0);
     }
-  }, [maxIndex, currentIndex, categoriaActiva]);
+  }, [maxIndex, currentIndex]);
 
   // Autoplay inteligente: avanza cada 3.8s si no está en pausa
   useEffect(() => {
@@ -145,9 +92,6 @@ export function FeaturedProductsCarousel({
     }, 1500);
   };
 
-  // Porcentaje de avance para la barra animada de progreso
-  const progressPercent = maxIndex > 0 ? ((currentIndex + 1) / (maxIndex + 1)) * 100 : 100;
-
   return (
     <div
       className="space-y-6 select-none"
@@ -159,83 +103,23 @@ export function FeaturedProductsCarousel({
         setTimeout(() => setIsPaused(false), 2500);
       }}
     >
-      {/* Header del Carrusel con Filtros y Controles */}
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
-        {/* Títulos y Pestañas */}
-        <div className="space-y-3">
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-mono uppercase tracking-widest text-zinc-500 font-bold block">
-              Equipamiento Profesional
-            </span>
-          </div>
-
+      {/* Header del Carrusel con Controles */}
+      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+        {/* Título y Subtítulo */}
+        <div className="space-y-1.5 max-w-xl">
+          <span className="text-xs font-mono uppercase tracking-widest text-zinc-500 font-semibold block">
+            Equipamiento Profesional
+          </span>
           <h2 className="text-2xl sm:text-3xl font-black text-zinc-950 uppercase tracking-tight">
-            Herramientas Seleccionadas
+            Productos Destacados
           </h2>
-
-          {/* Filtro de Pestañas Rápidas */}
-          <div className="flex flex-wrap items-center gap-1.5 pt-1">
-            <button
-              type="button"
-              onClick={() => {
-                setCategoriaActiva('TODOS');
-                setCurrentIndex(0);
-              }}
-              className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                categoriaActiva === 'TODOS'
-                  ? 'bg-black text-white shadow-xs'
-                  : 'bg-zinc-100 text-zinc-600 hover:text-black hover:bg-zinc-200'
-              }`}
-            >
-              Todos ({productos.length})
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setCategoriaActiva('MAQUINAS');
-                setCurrentIndex(0);
-              }}
-              className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                categoriaActiva === 'MAQUINAS'
-                  ? 'bg-black text-white shadow-xs'
-                  : 'bg-zinc-100 text-zinc-600 hover:text-black hover:bg-zinc-200'
-              }`}
-            >
-              Máquinas & Trimmers
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setCategoriaActiva('TIJERAS_ACC');
-                setCurrentIndex(0);
-              }}
-              className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                categoriaActiva === 'TIJERAS_ACC'
-                  ? 'bg-black text-white shadow-xs'
-                  : 'bg-zinc-100 text-zinc-600 hover:text-black hover:bg-zinc-200'
-              }`}
-            >
-              Tijeras & Pomadas
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setCategoriaActiva('KITS');
-                setCurrentIndex(0);
-              }}
-              className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                categoriaActiva === 'KITS'
-                  ? 'bg-black text-white shadow-xs'
-                  : 'bg-zinc-100 text-zinc-600 hover:text-black hover:bg-zinc-200'
-              }`}
-            >
-              Kits para Alumno
-            </button>
-          </div>
+          <p className="text-xs sm:text-sm text-zinc-600 leading-relaxed font-normal">
+            Máquinas originales con garantía oficial, herramientas de precisión y suministros para barberos en Ica y Huancayo.
+          </p>
         </div>
 
         {/* Controles de Navegación del Carrusel */}
-        <div className="flex items-center gap-3 self-end md:self-auto">
+        <div className="flex items-center gap-3 self-end sm:self-auto shrink-0">
           {/* Indicador de Pausa / Reproducción */}
           <button
             type="button"
@@ -250,7 +134,7 @@ export function FeaturedProductsCarousel({
               </>
             ) : (
               <>
-                <Pause className="w-3 h-3 text-emerald-600 animate-pulse" />
+                <Pause className="w-3 h-3 text-zinc-900" />
                 <span className="hidden sm:inline text-zinc-800">Auto</span>
               </>
             )}
@@ -268,7 +152,7 @@ export function FeaturedProductsCarousel({
               onClick={handlePrev}
               disabled={maxIndex === 0}
               className="p-2 rounded-xl bg-white border border-zinc-200 text-zinc-800 hover:bg-zinc-100 hover:border-black active:scale-95 transition-all shadow-2xs cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-              aria-label="Anterior máquina"
+              aria-label="Anterior"
             >
               <ChevronLeft className="w-4 h-4" />
             </button>
@@ -277,7 +161,7 @@ export function FeaturedProductsCarousel({
               onClick={handleNext}
               disabled={maxIndex === 0}
               className="p-2 rounded-xl bg-white border border-zinc-200 text-zinc-800 hover:bg-zinc-100 hover:border-black active:scale-95 transition-all shadow-2xs cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-              aria-label="Siguiente máquina"
+              aria-label="Siguiente"
             >
               <ChevronRight className="w-4 h-4" />
             </button>
@@ -285,17 +169,8 @@ export function FeaturedProductsCarousel({
         </div>
       </div>
 
-      {/* Barra de Progreso Animada estilo Luxury */}
-      <div className="w-full bg-zinc-200/80 h-1 rounded-full overflow-hidden">
-        <motion.div
-          animate={{ width: `${progressPercent}%` }}
-          transition={{ ease: 'easeInOut', duration: 0.3 }}
-          className="h-full bg-black rounded-full"
-        />
-      </div>
-
       {/* Contenedor del Carrusel (Viewport) */}
-      <div className="relative overflow-hidden py-2">
+      <div className="relative overflow-hidden py-1">
         <motion.div
           className="flex"
           animate={{
@@ -306,97 +181,110 @@ export function FeaturedProductsCarousel({
           {productosFiltrados.map((prod) => {
             const esAnadido = addedId === prod.id;
             const precioVenta = prod.precio_oferta || prod.precio_venta;
+            const tieneOferta = Boolean(prod.precio_oferta && prod.precio_oferta < prod.precio_venta);
+            const etiquetaBadge = prod.categoria?.nombre || 'OFICIAL';
 
             return (
               <div
                 key={prod.id}
                 style={{ width: `${100 / itemsPerPage}%` }}
-                className="shrink-0 px-2.5"
+                className="shrink-0 px-1.5 sm:px-2.5"
               >
-                <div className="h-full rounded-2xl bg-white border border-zinc-200 overflow-hidden flex flex-col justify-between hover:border-zinc-900 hover:shadow-xl transition-all duration-300 group relative">
+                <div className="h-full rounded-xl sm:rounded-2xl bg-white border border-zinc-200 overflow-hidden flex flex-col justify-between hover:border-zinc-900 hover:shadow-xl transition-all duration-300 group relative">
                   
                   {/* Imagen del Producto con Overlay y Badges */}
-                  <div className="relative aspect-square w-full bg-zinc-100 overflow-hidden border-b border-zinc-100 flex items-center justify-center">
+                  <div className="relative aspect-square w-full bg-zinc-50 overflow-hidden border-b border-zinc-100 flex items-center justify-center p-2 sm:p-3">
                     {prod.imagenes && prod.imagenes.length > 0 ? (
                       <img
                         src={prod.imagenes[0]}
                         alt={prod.nombre}
-                        className="w-full h-full object-cover group-hover:scale-106 transition-transform duration-500 ease-out"
+                        className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-500 ease-out"
                       />
                     ) : (
                       <div className="flex flex-col items-center justify-center text-zinc-400 opacity-60">
-                        <Boxes className="w-10 h-10 mb-1" />
-                        <span className="text-[9px] font-mono uppercase tracking-widest">Sin Foto</span>
+                        <Boxes className="w-8 h-8 sm:w-10 sm:h-10 mb-1" />
+                        <span className="text-[8px] sm:text-[9px] font-mono uppercase tracking-widest">Sin Foto</span>
                       </div>
                     )}
 
                     {/* Insignia de Oferta (si aplica) */}
-                    {prod.precio_oferta && prod.precio_oferta < prod.precio_venta && (
-                      <div className="absolute top-3 right-3 px-2.5 py-1 rounded-lg bg-rose-600 text-white text-[10px] font-mono font-bold shadow-md">
-                        OFERTA
+                    {tieneOferta && (
+                      <div className="absolute top-2 right-2 sm:top-3 sm:right-3 px-1.5 sm:px-2 py-0.5 rounded bg-zinc-950 text-white text-[8px] sm:text-[9px] font-mono font-bold uppercase tracking-wider shadow-xs">
+                        Oferta
                       </div>
                     )}
 
-                    {/* Insignia de Stock o SKU */}
-                    <div className="absolute top-3 left-3 px-2 py-0.5 rounded-md bg-white/90 backdrop-blur-xs text-zinc-900 text-[9px] font-mono uppercase font-bold border border-zinc-200 shadow-2xs">
-                      {prod.sku.split('-')[0] || 'OFICIAL'}
+                    {/* Insignia de Marca o Categoría */}
+                    <div className="absolute top-2 left-2 sm:top-3 sm:left-3 px-1.5 sm:px-2 py-0.5 rounded bg-white/95 text-zinc-900 text-[8px] sm:text-[9px] font-mono uppercase font-bold border border-zinc-200 shadow-2xs truncate max-w-[75%]">
+                      {etiquetaBadge}
                     </div>
 
-                    {/* Botón flotante para ver Ficha Técnica */}
-                    <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center p-4">
+                    {/* Botón flotante para ver Ficha Técnica (en pantallas medianas y grandes) */}
+                    <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity hidden sm:flex items-center justify-center p-4">
                       <button
                         type="button"
                         onClick={() => onQuickView(prod)}
-                        className="px-4 py-2 rounded-xl bg-white/95 text-zinc-950 font-bold text-xs shadow-lg hover:bg-white flex items-center gap-1.5 transition-all transform translate-y-2 group-hover:translate-y-0 cursor-pointer active:scale-95"
+                        className="px-4 py-2 rounded-xl bg-white text-zinc-950 font-bold text-xs shadow-md hover:bg-zinc-50 transition-all transform translate-y-1 group-hover:translate-y-0 cursor-pointer active:scale-95"
                       >
                         <Eye className="w-3.5 h-3.5" />
-                        <span>Ver Ficha Técnica</span>
+                        <span>Ver Detalle</span>
                       </button>
                     </div>
                   </div>
 
                   {/* Detalle y Precios */}
-                  <div className="p-5 space-y-3 flex-1 flex flex-col justify-between">
+                  <div className="p-3 sm:p-4 md:p-5 space-y-2 sm:space-y-3 flex-1 flex flex-col justify-between">
                     <div>
-                      <span className="text-[10px] font-mono text-zinc-400 uppercase tracking-wider block">
-                        SKU: {prod.sku}
+                      <span className="text-[9px] sm:text-[10px] font-mono text-zinc-400 uppercase tracking-widest block font-medium truncate">
+                        {etiquetaBadge}
                       </span>
-                      <h3 className="text-sm font-bold text-zinc-950 mt-1 line-clamp-1 group-hover:text-black">
+                      <h3 className="text-xs sm:text-sm font-bold text-zinc-950 mt-0.5 sm:mt-1 line-clamp-1 group-hover:text-black">
                         {prod.nombre}
                       </h3>
-                      <p className="text-xs text-zinc-500 mt-1 line-clamp-2 leading-relaxed">
+                      <p className="text-[10px] sm:text-xs text-zinc-500 mt-0.5 sm:mt-1 line-clamp-1 sm:line-clamp-2 leading-relaxed">
                         {prod.descripcion}
                       </p>
+                      <div className="mt-1.5 sm:mt-2.5 text-[9px] sm:text-[10px] font-mono text-zinc-500 flex items-center gap-1.5 truncate">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 shrink-0" />
+                        <span className="truncate">Recojo en tienda</span>
+                      </div>
                     </div>
 
                     {/* Precio y Botón de Añadir */}
-                    <div className="pt-3 border-t border-zinc-100 flex items-center justify-between gap-2">
-                      <div>
-                        <span className="text-[10px] text-zinc-400 block font-mono">
-                          Precio Regular
+                    <div className="pt-2 sm:pt-3 border-t border-zinc-100 flex items-center justify-between gap-1.5 sm:gap-2">
+                      <div className="min-w-0">
+                        <span className="text-[8px] sm:text-[10px] text-zinc-400 block font-mono">
+                          {tieneOferta ? 'Oferta' : 'Precio'}
                         </span>
-                        <span className="text-base font-black text-zinc-950 font-mono">
-                          {formatCurrency(precioVenta)}
-                        </span>
+                        <div className="flex items-baseline gap-1 sm:gap-1.5 font-mono">
+                          <span className="text-xs sm:text-base font-black text-zinc-950 truncate">
+                            {formatCurrency(precioVenta)}
+                          </span>
+                          {tieneOferta && (
+                            <span className="text-[10px] sm:text-xs text-zinc-400 line-through truncate hidden xs:inline">
+                              {formatCurrency(prod.precio_venta)}
+                            </span>
+                          )}
+                        </div>
                       </div>
 
                       <button
                         type="button"
                         onClick={(e) => handleCardAdd(prod, e)}
-                        className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all shadow-sm flex items-center gap-1.5 cursor-pointer active:scale-95 ${
+                        className={`px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-lg sm:rounded-xl text-[10px] sm:text-xs font-bold transition-all shadow-2xs flex items-center gap-1 sm:gap-1.5 cursor-pointer active:scale-95 shrink-0 ${
                           esAnadido
-                            ? 'bg-emerald-600 text-white'
-                            : 'bg-black text-white hover:bg-zinc-800'
+                            ? 'bg-zinc-950 text-white'
+                            : 'bg-zinc-950 hover:bg-black text-white'
                         }`}
                       >
                         {esAnadido ? (
                           <>
-                            <Check className="w-3.5 h-3.5 stroke-[3]" />
-                            <span>¡Añadido!</span>
+                            <Check className="w-3 h-3 sm:w-3.5 sm:h-3.5 stroke-[3]" />
+                            <span>¡Listo!</span>
                           </>
                         ) : (
                           <>
-                            <ShoppingCart className="w-3.5 h-3.5" />
+                            <ShoppingCart className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
                             <span>Añadir</span>
                           </>
                         )}
@@ -411,18 +299,65 @@ export function FeaturedProductsCarousel({
         </motion.div>
       </div>
 
-      {/* Pie del Carrusel con Enlace al Catálogo Completo */}
-      <div className="pt-2 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-zinc-500 border-t border-zinc-200/60">
-        <span className="font-medium text-zinc-600">
-          Equipos y herramientas 100% originales con garantía oficial de fábrica.
-        </span>
-        <Link
-          href="/tienda"
-          className="font-bold text-black hover:underline flex items-center gap-1 group shrink-0"
-        >
-          <span>Explorar Todo el Catálogo</span>
-          <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
-        </Link>
+      {/* Paginación Minimalista de Barras */}
+      {maxIndex > 0 && (
+        <div className="flex items-center justify-center gap-1.5 pt-1">
+          {Array.from({ length: maxIndex + 1 }).map((_, idx) => (
+            <button
+              key={idx}
+              type="button"
+              onClick={() => setCurrentIndex(idx)}
+              className={`h-1.5 rounded-full transition-all cursor-pointer ${
+                currentIndex === idx ? 'w-6 bg-zinc-950' : 'w-1.5 bg-zinc-300 hover:bg-zinc-400'
+              }`}
+              aria-label={`Ir a grupo ${idx + 1}`}
+            />
+          ))}
+        </div>
+      )}
+
+      {/* Pilares Editoriales de Confianza (Sin emojis ni iconos) */}
+      <div className="pt-6 border-t border-zinc-200/80 space-y-6">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="p-4 rounded-2xl border border-zinc-200 bg-white">
+            <span className="text-xs font-bold text-zinc-950 uppercase tracking-tight block">
+              Garantía Oficial
+            </span>
+            <p className="text-[11px] text-zinc-500 mt-1 leading-relaxed">
+              Equipos 100% originales sellados de fábrica con respaldo de marca y repuestos.
+            </p>
+          </div>
+
+          <div className="p-4 rounded-2xl border border-zinc-200 bg-white">
+            <span className="text-xs font-bold text-zinc-950 uppercase tracking-tight block">
+              Recojo en Tienda Física
+            </span>
+            <p className="text-[11px] text-zinc-500 mt-1 leading-relaxed">
+              Retiro inmediato en mostrador Sede Ica (Calle Bolívar) o Huancayo (Jr. Guido).
+            </p>
+          </div>
+
+          <div className="p-4 rounded-2xl border border-zinc-200 bg-white">
+            <span className="text-xs font-bold text-zinc-950 uppercase tracking-tight block">
+              Asesoría Especializada
+            </span>
+            <p className="text-[11px] text-zinc-500 mt-1 leading-relaxed">
+              Atención directa por WhatsApp para orientarte según tu nivel o uso diario.
+            </p>
+          </div>
+        </div>
+
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
+          <span className="text-zinc-500 font-medium">
+            Equipos y herramientas de barbería profesional con garantía oficial.
+          </span>
+          <Link
+            href="/tienda"
+            className="font-bold text-zinc-950 hover:text-black uppercase tracking-wider text-xs border-b border-zinc-950 pb-0.5 hover:border-black transition-colors shrink-0"
+          >
+            Explorar Todo el Catálogo
+          </Link>
+        </div>
       </div>
     </div>
   );

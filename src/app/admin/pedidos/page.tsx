@@ -34,8 +34,10 @@ import {
 } from '@/lib/pedidos-service';
 import { formatCurrency, generateWhatsAppLink } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
+import { useSede } from '@/context/SedeContext';
 
 export default function AdminPedidosPage() {
+  const { sedeActiva, sedeInfo } = useSede();
   const [cargando, setCargando] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -60,7 +62,8 @@ export default function AdminPedidosPage() {
   const [busqueda, setBusqueda] = useState('');
   const [filtroEstado, setFiltroEstado] = useState<'TODOS' | 'PENDIENTE' | 'PAGADO' | 'ENTREGADO' | 'CANCELADO'>('TODOS');
   const [filtroCanal, setFiltroCanal] = useState<'TODOS' | 'WEB_TIENDA' | 'ACADEMIA' | 'POS_MOSTRADOR'>('TODOS');
-  const [filtroSede, setFiltroSede] = useState<'TODAS' | 'Ica' | 'Huancayo'>('TODAS');
+  // La sede se toma siempre desde el SedeContext
+  const filtroSede = sedeActiva === 'ica' ? 'Ica' : 'Huancayo';
   const [filtroFecha, setFiltroFecha] = useState<'TODAS' | 'HOY' | 'SEMANA'>('TODAS');
 
   // Cargar datos (Sin dependencias circulares)
@@ -76,7 +79,7 @@ export default function AdminPedidosPage() {
 
       const [lista, estadisticas] = await Promise.all([
         getPedidosAdmin(filtros),
-        getEstadisticasPedidos(),
+        getEstadisticasPedidos(sedeActiva),
       ]);
 
       setPedidos(lista);
@@ -108,7 +111,7 @@ export default function AdminPedidosPage() {
       setCargando(false);
       setRefreshing(false);
     }
-  }, [busqueda, filtroEstado, filtroCanal, filtroSede, filtroFecha]);
+  }, [busqueda, filtroEstado, filtroCanal, filtroSede, filtroFecha, sedeActiva]);
 
   useEffect(() => {
     cargarDatos();
@@ -118,6 +121,7 @@ export default function AdminPedidosPage() {
   useEffect(() => {
     const handleEventoLocal = () => cargarDatos();
     window.addEventListener('galindo_pedido_web_realizado', handleEventoLocal);
+    window.addEventListener('galindo_sede_changed', handleEventoLocal);
 
     const channel = supabase
       .channel('admin_pedidos_feed')
@@ -132,6 +136,7 @@ export default function AdminPedidosPage() {
 
     return () => {
       window.removeEventListener('galindo_pedido_web_realizado', handleEventoLocal);
+      window.removeEventListener('galindo_sede_changed', handleEventoLocal);
       supabase.removeChannel(channel);
     };
   }, [cargarDatos]);
@@ -332,16 +337,11 @@ export default function AdminPedidosPage() {
                   <option value="POS_MOSTRADOR">Mostrador POS 🏪</option>
                 </select>
 
-                {/* Sede */}
-                <select
-                  value={filtroSede}
-                  onChange={(e) => setFiltroSede(e.target.value as any)}
-                  className="px-3 py-2 rounded-xl border border-zinc-200 text-xs font-semibold bg-white text-zinc-800 outline-none cursor-pointer"
-                >
-                  <option value="TODAS">Todas las Sedes</option>
-                  <option value="Ica">Sede Ica</option>
-                  <option value="Huancayo">Sede Huancayo</option>
-                </select>
+                {/* Sede Activa (controlada por el contexto global) */}
+                <div className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-zinc-200 bg-zinc-50 text-xs font-semibold text-zinc-700 select-none">
+                  <span className={`w-2 h-2 rounded-full ${sedeActiva === 'ica' ? 'bg-emerald-500' : 'bg-blue-500'}`} />
+                  {sedeInfo.nombre}
+                </div>
 
                 {/* Fecha */}
                 <select
@@ -498,30 +498,6 @@ export default function AdminPedidosPage() {
                           {/* Acciones */}
                           <td className="py-3.5 px-4 text-right" onClick={(e) => e.stopPropagation()}>
                             <div className="flex items-center justify-end gap-1.5">
-                              {/* Acciones para Academia: Inscribir (si está pendiente) o Matriculado (si ya se formalizó) */}
-                              {pedido.tipo_canal === 'ACADEMIA' && (
-                                pedido.notas?.includes('[Matrícula formalizada:') ? (
-                                  <button
-                                    type="button"
-                                    onClick={() => handleOpenDetalle(pedido, 'ACADEMIA')}
-                                    className="px-2.5 py-1 rounded-lg bg-emerald-100 hover:bg-emerald-200 text-emerald-800 border border-emerald-300 font-bold text-[10px] transition-all cursor-pointer flex items-center gap-1 shadow-2xs"
-                                    title="Ver matrícula oficial y expediente del alumno"
-                                  >
-                                    <GraduationCap className="w-3 h-3 text-emerald-700" />
-                                    <span>Matriculado</span>
-                                  </button>
-                                ) : (
-                                  <button
-                                    type="button"
-                                    onClick={() => handleOpenDetalle(pedido, 'ACADEMIA')}
-                                    className="px-2.5 py-1 rounded-lg bg-amber-500 hover:bg-amber-600 text-white font-bold text-[10px] transition-all shadow-2xs cursor-pointer active:scale-95 flex items-center gap-1"
-                                    title="Rellenar datos faltantes e inscribir alumno"
-                                  >
-                                    <GraduationCap className="w-3 h-3" />
-                                    <span>Inscribir</span>
-                                  </button>
-                                )
-                              )}
 
                               {pedido.cliente_telefono && (
                                 <button
@@ -534,17 +510,6 @@ export default function AdminPedidosPage() {
                                 </button>
                               )}
 
-                              {/* Botón Entregar: EXCLUSIVO para productos físicos de tienda/web, NUNCA para cursos de academia */}
-                              {pedido.tipo_canal !== 'ACADEMIA' && pedido.estado === 'PENDIENTE' && (
-                                <button
-                                  type="button"
-                                  onClick={(e) => handleQuickEntregar(e, pedido)}
-                                  className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10px] transition-all shadow-2xs cursor-pointer active:scale-95"
-                                  title="Marcar como entregado y enviar constancia"
-                                >
-                                  Entregar
-                                </button>
-                              )}
 
                               <button
                                 type="button"

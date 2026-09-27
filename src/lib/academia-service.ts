@@ -5,7 +5,6 @@
 
 import { supabase } from '@/lib/supabase';
 import { Alumno, Matricula, CuotaMatricula, Curso, EstadoAcademico, TurnoOption } from '@/types/database';
-import { MOCK_CURSOS } from '@/lib/mock-data';
 
 export interface MatriculaConDetalle extends Matricula {
   alumno: Alumno;
@@ -112,8 +111,17 @@ export function normalizarCurso(raw: any): Curso {
     turnos = [...DEFAULT_TURNOS];
   }
 
+  let esDestacado = Boolean(raw.destacado);
+  if (typeof window !== 'undefined') {
+    const localDestacadoId = localStorage.getItem('galindo_curso_destacado_id');
+    if (localDestacadoId && localDestacadoId === raw.id) {
+      esDestacado = true;
+    }
+  }
+
   return {
     ...raw,
+    destacado: esDestacado,
     sede: raw.sede || 'ica',
     turnos,
   };
@@ -145,15 +153,8 @@ export async function getCursosActivos(sedeId?: string): Promise<Curso[]> {
     console.warn('Error al consultar cursos activos en supabase:', err);
   }
 
-  // Fallback seguro a cursos mock oficiales configurados por sede
-  if (sedeId) {
-    const fallbackPorSede = MOCK_CURSOS.filter((c) => {
-      const s = (c.sede || 'ica').toLowerCase();
-      return s === sedeId.toLowerCase() || s === 'ambas' || s === 'todas';
-    });
-    if (fallbackPorSede.length > 0) return fallbackPorSede;
-  }
-  return MOCK_CURSOS;
+  // Si no hay cursos o hubo un error, retornamos arreglo vacío
+  return [];
 }
 
 // -------------------------------------------------------------------------
@@ -770,6 +771,7 @@ export interface CursoInput {
   descripcion_kit?: string;
   imagen_url: string;
   activo?: boolean;
+  destacado?: boolean;
   turnos?: TurnoOption[];
 }
 
@@ -831,6 +833,7 @@ export async function guardarCurso(
       descripcion_kit: curso.descripcion_kit ? curso.descripcion_kit.trim() : null,
       imagen_url: curso.imagen_url.trim() || defaultImg,
       activo: curso.activo !== undefined ? curso.activo : true,
+      destacado: Boolean(curso.destacado),
       beneficios: turnosAGuardar,
     };
 
@@ -903,6 +906,40 @@ export async function toggleCursoActivo(
   } catch (err) {
     console.error('Error al cambiar estado de curso:', err);
     return false;
+  }
+}
+
+/**
+ * Marcar un curso como recomendado/destacado en la portada principal
+ */
+export async function marcarCursoDestacado(
+  cursoId: string
+): Promise<boolean> {
+  try {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('galindo_curso_destacado_id', cursoId);
+      window.dispatchEvent(new CustomEvent('galindo_curso_destacado_changed', { detail: cursoId }));
+    }
+
+    // 1. Intentar desmarcar todos los demás en Supabase
+    await supabase
+      .from('cursos')
+      .update({ destacado: false })
+      .neq('id', cursoId);
+
+    // 2. Marcar el seleccionado como destacado
+    const { error } = await supabase
+      .from('cursos')
+      .update({ destacado: true })
+      .eq('id', cursoId);
+
+    if (error) {
+      console.warn('Advertencia al marcar curso en Supabase (usando respaldo local):', error.message);
+    }
+    return true;
+  } catch (err) {
+    console.warn('Error al marcar curso destacado:', err);
+    return true;
   }
 }
 

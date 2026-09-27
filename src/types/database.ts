@@ -143,6 +143,7 @@ export interface Curso {
   descripcion_kit?: string;
   imagen_url: string;
   activo: boolean;
+  destacado?: boolean;
   sede?: 'ica' | 'huancayo' | 'ambas' | 'todas' | string;
   turnos?: TurnoOption[];
   beneficios?: any[];

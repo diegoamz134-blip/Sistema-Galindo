@@ -124,18 +124,17 @@ export async function getMovimientosKardexPaginado(
 
     if (error) {
       console.warn('Error al consultar movimientos_inventario en Supabase:', error.message);
-      const totalMock = MOCK_MOVIMIENTOS_INVENTARIO.length;
       return {
-        movimientos: MOCK_MOVIMIENTOS_INVENTARIO.slice(desde, hasta + 1),
-        totalRegistros: totalMock,
-        totalPaginas: Math.ceil(totalMock / porPagina) || 1,
+        movimientos: [],
+        totalRegistros: 0,
+        totalPaginas: 1,
         paginaActual: pagina,
         totalesGenerales: {
-          entradas: 10,
-          salidas: 2,
+          entradas: 0,
+          salidas: 0,
           usoClases: 0,
           ajustes: 0,
-          total: totalMock,
+          total: 0,
         },
       };
     }
@@ -190,14 +189,14 @@ export async function getProductosParaKardex(): Promise<Producto[]> {
       .eq('activo', true)
       .order('nombre', { ascending: true });
 
-    if (error || !data || data.length === 0) {
-      return MOCK_PRODUCTOS;
+    if (error || !data) {
+      return [];
     }
 
     return data as Producto[];
   } catch (err) {
     console.warn('Error al obtener productos para Kardex:', err);
-    return MOCK_PRODUCTOS;
+    return [];
   }
 }
 

@@ -48,8 +48,6 @@ export function NuevaMatriculaModal({
   const [numeroCuotas, setNumeroCuotas] = useState<number>(2);
   const [metodoPago, setMetodoPago] = useState<string>('EFECTIVO');
   const [numeroOperacion, setNumeroOperacion] = useState<string>('');
-  const [registrarEnCaja, setRegistrarEnCaja] = useState<boolean>(true);
-
   // Kit y Notas
   const [kitEntregado, setKitEntregado] = useState<boolean>(false);
   const [notas, setNotas] = useState<string>('');
@@ -130,7 +128,6 @@ export function NuevaMatriculaModal({
       numero_operacion: numeroOperacion.trim() || undefined,
       kit_entregado: kitEntregado,
       notas: notas.trim() || undefined,
-      registrar_en_caja: registrarEnCaja,
     };
 
     const res = await crearMatriculaCompleta(inputData);
@@ -483,19 +480,8 @@ export function NuevaMatriculaModal({
               </div>
             </div>
 
-            {/* Opciones y Checkboxes */}
+            {/* Opciones y Checkboxes (Limpiado) */}
             <div className="pt-1 flex flex-wrap items-center gap-6">
-              <label className="flex items-center gap-2 cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={registrarEnCaja}
-                  onChange={(e) => setRegistrarEnCaja(e.target.checked)}
-                  className="w-4 h-4 rounded text-black focus:ring-0 cursor-pointer"
-                />
-                <span className="font-medium text-zinc-800">
-                  Registrar ingreso del abono en Caja Chica activa
-                </span>
-              </label>
             </div>
           </div>
 

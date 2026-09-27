@@ -30,6 +30,7 @@ import {
   CreateProductInput,
   UpdateProductInput,
 } from '@/lib/products-service';
+import { useSede } from '@/context/SedeContext';
 
 const DEFAULT_PRODUCT_IMAGE =
   'https://images.unsplash.com/photo-1621607512214-68297480165e?auto=format&fit=crop&w=800&q=80';
@@ -106,6 +107,7 @@ function generarBotonesPaginacion(actual: number, total: number): (number | stri
 }
 
 export default function AdminProductosPage() {
+  const { sedeActiva } = useSede();
   const [productos, setProductos] = useState<Producto[]>([]);
   const [categorias, setCategorias] = useState<Categoria[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -126,8 +128,7 @@ export default function AdminProductosPage() {
   const [categoriaId, setCategoriaId] = useState('');
   const [precioCompra, setPrecioCompra] = useState('');
   const [precioVenta, setPrecioVenta] = useState('');
-  const [stockIca, setStockIca] = useState('');
-  const [stockHuancayo, setStockHuancayo] = useState('');
+  const [stockLocal, setStockLocal] = useState('');
   const [stockMinimo, setStockMinimo] = useState('3');
   const [imagenUrl, setImagenUrl] = useState('');
   const [imagenPesoKb, setImagenPesoKb] = useState<number | null>(null);
@@ -239,8 +240,7 @@ export default function AdminProductosPage() {
     setNombre('');
     setPrecioCompra('');
     setPrecioVenta('');
-    setStockIca('');
-    setStockHuancayo('0');
+    setStockLocal('');
     setStockMinimo('3');
     setImagenUrl('');
     setImagenPesoKb(null);
@@ -260,8 +260,7 @@ export default function AdminProductosPage() {
     setCategoriaId(p.categoria_id || (categorias[0]?.id ?? ''));
     setPrecioCompra(String(p.precio_compra ?? '0'));
     setPrecioVenta(String(p.precio_venta ?? '0'));
-    setStockIca(String(p.stock_ica ?? p.stock ?? '0'));
-    setStockHuancayo(String(p.stock_huancayo ?? '0'));
+    setStockLocal(String(sedeActiva === 'ica' ? (p.stock_ica ?? p.stock ?? '0') : (p.stock_huancayo ?? '0')));
     setStockMinimo(String(p.stock_minimo ?? '3'));
     setImagenUrl(p.imagenes && p.imagenes.length > 0 ? p.imagenes[0] : '');
     setImagenPesoKb(null);
@@ -331,9 +330,11 @@ export default function AdminProductosPage() {
     setIsSaving(true);
 
     const finalSku = sku.trim() || generarSkuAutomatico();
-    const parsedStockIca = Math.max(0, parseInt(stockIca, 10) || 0);
-    const parsedStockHyo = Math.max(0, parseInt(stockHuancayo, 10) || 0);
-    const totalConsolidado = parsedStockIca + parsedStockHyo;
+    const parsedStockLocal = Math.max(0, parseInt(stockLocal, 10) || 0);
+
+    const stockIcaAUsar = sedeActiva === 'ica' ? parsedStockLocal : (editingProducto?.stock_ica || 0);
+    const stockHyoAUsar = sedeActiva === 'huancayo' ? parsedStockLocal : (editingProducto?.stock_huancayo || 0);
+    const totalConsolidado = stockIcaAUsar + stockHyoAUsar;
 
     if (editingProducto) {
       const updateData: UpdateProductInput = {
@@ -344,8 +345,8 @@ export default function AdminProductosPage() {
         precio_compra: parseFloat(precioCompra) || 0,
         precio_venta: parseFloat(precioVenta) || 0,
         precio_alumno: null,
-        stock_ica: parsedStockIca,
-        stock_huancayo: parsedStockHyo,
+        stock_ica: stockIcaAUsar,
+        stock_huancayo: stockHyoAUsar,
         stock: totalConsolidado,
         stock_minimo: parseInt(stockMinimo, 10) || 3,
         imagen_url: imagenUrl || undefined,
@@ -374,8 +375,8 @@ export default function AdminProductosPage() {
         descripcion: descripcion || `${nombre} para uso profesional de barbería`,
         precio_compra: parseFloat(precioCompra) || 0,
         precio_venta: parseFloat(precioVenta) || 0,
-        stock_ica: parsedStockIca,
-        stock_huancayo: parsedStockHyo,
+        stock_ica: stockIcaAUsar,
+        stock_huancayo: stockHyoAUsar,
         stock: totalConsolidado,
         stock_minimo: parseInt(stockMinimo, 10) || 3,
         imagen_url: imagenUrl || undefined,
@@ -396,8 +397,7 @@ export default function AdminProductosPage() {
         setSku('');
         setPrecioCompra('');
         setPrecioVenta('');
-        setStockIca('');
-        setStockHuancayo('0');
+        setStockLocal('');
         setStockMinimo('3');
         setImagenUrl('');
         setImagenPesoKb(null);
@@ -884,103 +884,36 @@ export default function AdminProductosPage() {
                 </div>
               </div>
 
-              {/* Stock Multi-Sede (Ica y Huancayo) y Mínimo */}
-              <div className="space-y-3 p-4 rounded-2xl bg-zinc-50 border border-zinc-200">
-                <div className="flex flex-wrap items-center justify-between gap-2">
+              {/* Stock Multi-Sede y Mínimo (Simplificado a la Sede Global) */}
+              <div className="bg-zinc-50/50 p-4 sm:p-5 rounded-2xl border border-zinc-200">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 gap-2">
                   <div>
-                    <span className="text-[11px] font-bold text-zinc-900 uppercase tracking-wider block">
-                      Inventario Físico por Sede
-                    </span>
-                    <span className="text-[10px] text-zinc-500">
-                      Asigna el stock según la tienda donde tengas mercadería física disponible
-                    </span>
+                    <h3 className="text-xs font-black text-zinc-900 uppercase tracking-tight">
+                      INVENTARIO FÍSICO ({sedeActiva === 'ica' ? 'SEDE ICA' : 'SEDE HUANCAYO'})
+                    </h3>
+                    <p className="text-[10px] text-zinc-500 mt-0.5">
+                      Asigna el stock de este producto para la sede actual seleccionada.
+                    </p>
                   </div>
-                  <span className="text-[11px] font-mono font-semibold px-2.5 py-1 rounded-lg bg-white border border-zinc-200 text-zinc-800 shadow-2xs">
-                    Total Consolidado:{' '}
-                    <b className="text-black font-black">
-                      {(parseInt(stockIca, 10) || 0) + (parseInt(stockHuancayo, 10) || 0)} un.
-                    </b>
-                  </span>
                 </div>
 
-                {/* Botones de Asignación Rápida */}
-                <div className="flex flex-wrap items-center gap-1.5 pt-1">
-                  <span className="text-[10px] uppercase font-bold text-zinc-400 mr-1">Destinar a:</span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setStockHuancayo('0');
-                      if (stockIca === '0' || !stockIca) setStockIca('10');
-                    }}
-                    className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer shadow-2xs ${
-                      (parseInt(stockIca, 10) || 0) > 0 && (parseInt(stockHuancayo, 10) || 0) === 0
-                        ? 'bg-zinc-950 text-white'
-                        : 'bg-white border border-zinc-200 text-zinc-700 hover:border-black'
-                    }`}
-                  >
-                    Exclusivo Ica
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setStockIca('0');
-                      if (stockHuancayo === '0' || !stockHuancayo) setStockHuancayo('10');
-                    }}
-                    className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer shadow-2xs ${
-                      (parseInt(stockIca, 10) || 0) === 0 && (parseInt(stockHuancayo, 10) || 0) > 0
-                        ? 'bg-zinc-950 text-white'
-                        : 'bg-white border border-zinc-200 text-zinc-700 hover:border-black'
-                    }`}
-                  >
-                    Exclusivo Huancayo
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (stockIca === '0' || !stockIca) setStockIca('5');
-                      if (stockHuancayo === '0' || !stockHuancayo) setStockHuancayo('5');
-                    }}
-                    className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer shadow-2xs ${
-                      (parseInt(stockIca, 10) || 0) > 0 && (parseInt(stockHuancayo, 10) || 0) > 0
-                        ? 'bg-zinc-950 text-white'
-                        : 'bg-white border border-zinc-200 text-zinc-700 hover:border-black'
-                    }`}
-                  >
-                    Ambas Sedes
-                  </button>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className="block font-bold text-zinc-800 mb-1 text-xs">
-                      Stock Sede Ica *
+                      Stock Sede {sedeActiva === 'ica' ? 'Ica' : 'Huancayo'} *
                     </label>
                     <input
                       type="number"
                       min="0"
                       required
                       placeholder="0"
-                      value={stockIca}
-                      onChange={(e) => setStockIca(e.target.value)}
+                      value={stockLocal}
+                      onChange={(e) => setStockLocal(e.target.value)}
                       className="w-full px-3.5 py-2.5 rounded-xl bg-white border border-zinc-300 text-zinc-900 font-mono font-bold outline-none focus:border-black transition-all text-xs"
                     />
-                    <span className="text-[10px] text-zinc-400 mt-1 block">Calle Bolívar 536</span>
-                  </div>
-
-                  <div>
-                    <label className="block font-bold text-zinc-800 mb-1 text-xs">
-                      Stock Sede Huancayo *
-                    </label>
-                    <input
-                      type="number"
-                      min="0"
-                      required
-                      placeholder="0"
-                      value={stockHuancayo}
-                      onChange={(e) => setStockHuancayo(e.target.value)}
-                      className="w-full px-3.5 py-2.5 rounded-xl bg-white border border-zinc-300 text-zinc-900 font-mono font-bold outline-none focus:border-black transition-all text-xs"
-                    />
-                    <span className="text-[10px] text-zinc-400 mt-1 block">Jr. Guido 654</span>
+                    <span className="text-[10px] text-zinc-400 mt-1 block">
+                      Unidades físicas disponibles
+                    </span>
                   </div>
 
                   <div>
@@ -999,49 +932,12 @@ export default function AdminProductosPage() {
                   </div>
                 </div>
 
-                {/* Explicación Dinámica en Tiempo Real */}
-                {(() => {
-                  const numIca = parseInt(stockIca, 10) || 0;
-                  const numHyo = parseInt(stockHuancayo, 10) || 0;
-                  if (numIca > 0 && numHyo === 0) {
-                    return (
-                      <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs">
-                        <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shrink-0 ring-2 ring-emerald-200" />
-                        <span>
-                          Este producto aparecerá <strong>únicamente en Sede Ica</strong> ({numIca} un.). En Huancayo no se mostrará.
-                        </span>
-                      </div>
-                    );
-                  }
-                  if (numIca === 0 && numHyo > 0) {
-                    return (
-                      <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-blue-50 border border-blue-200 text-blue-900 text-xs">
-                        <span className="w-2.5 h-2.5 rounded-full bg-blue-500 shrink-0 ring-2 ring-blue-200" />
-                        <span>
-                          Este producto aparecerá <strong>únicamente en Sede Huancayo</strong> ({numHyo} un.). En Ica no se mostrará.
-                        </span>
-                      </div>
-                    );
-                  }
-                  if (numIca > 0 && numHyo > 0) {
-                    return (
-                      <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-purple-50 border border-purple-200 text-purple-900 text-xs">
-                        <span className="w-2.5 h-2.5 rounded-full bg-purple-500 shrink-0 ring-2 ring-purple-200" />
-                        <span>
-                          Este producto estará <strong>disponible en ambas sedes</strong> ({numIca} en Ica y {numHyo} en Huancayo) con inventarios independientes.
-                        </span>
-                      </div>
-                    );
-                  }
-                  return (
-                    <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-zinc-100 border border-zinc-200 text-zinc-600 text-xs">
-                      <span className="w-2.5 h-2.5 rounded-full bg-zinc-400 shrink-0" />
-                      <span>
-                        Coloca la cantidad en la sede donde tengas mercadería. La sede que tenga <strong>0</strong> no mostrará el producto en la tienda ni en el mostrador.
-                      </span>
-                    </div>
-                  );
-                })()}
+                <div className="mt-3 flex items-start gap-2 p-2.5 rounded-lg bg-zinc-100/80 border border-zinc-200">
+                  <div className="w-1.5 h-1.5 rounded-full bg-zinc-400 mt-1.5 shrink-0" />
+                  <p className="text-[10px] text-zinc-600 leading-tight">
+                    El stock de la otra sede se mantendrá intacto. Para ver o editar el stock de la otra sede, cámbiala desde el panel principal.
+                  </p>
+                </div>
               </div>
 
               {/* Selector de Imagen Comprimida desde Galería */}

@@ -10,6 +10,7 @@ import {
   trasladarStockEntreSedes,
 } from '@/lib/kardex-service';
 import { supabase } from '@/lib/supabase';
+import { useSede } from '@/context/SedeContext';
 import {
   Search,
   Plus,
@@ -59,14 +60,15 @@ export default function AdminInventarioPage() {
   // Filtros
   const [busqueda, setBusqueda] = useState('');
   const [filtroTipo, setFiltroTipo] = useState<TipoMovimientoInventario | 'TODOS'>('TODOS');
-  const [filtroSede, setFiltroSede] = useState<'TODAS' | 'ica' | 'huancayo'>('TODAS');
   const [filtroProductoId, setFiltroProductoId] = useState<string>('todos');
+
+  // Sede Global
+  const { sedeActiva } = useSede();
 
   // Modal de registro de movimiento
   const [showModalMovimiento, setShowModalMovimiento] = useState(false);
   const [selectedProdId, setSelectedProdId] = useState('');
   const [tipoMov, setTipoMov] = useState<TipoMovimientoInventario>('ENTRADA');
-  const [sedeModal, setSedeModal] = useState<'ica' | 'huancayo'>('ica');
   const [cantidad, setCantidad] = useState('');
   const [motivo, setMotivo] = useState('');
   const [isSaving, setIsSaving] = useState(false);
@@ -94,7 +96,7 @@ export default function AdminInventarioPage() {
           getMovimientosKardexPaginado({
             productoId: filtroProductoId,
             tipo: filtroTipo,
-            sede: filtroSede,
+            sede: sedeActiva, // Usar sede global
             busqueda: busqueda.trim(),
             pagina: paginaDestino,
             porPagina: ITEMS_POR_PAGINA,
@@ -119,7 +121,7 @@ export default function AdminInventarioPage() {
         if (!silencioso) setIsRefreshing(false);
       }
     },
-    [pagina, filtroProductoId, filtroTipo, filtroSede, busqueda]
+    [pagina, filtroProductoId, filtroTipo, sedeActiva, busqueda]
   );
 
   // Efecto inicial y cuando cambia la página
@@ -130,11 +132,6 @@ export default function AdminInventarioPage() {
   // Reset a página 1 cuando cambian los filtros o el texto de búsqueda
   const handleCambioFiltroTipo = (tipo: TipoMovimientoInventario | 'TODOS') => {
     setFiltroTipo(tipo);
-    setPagina(1);
-  };
-
-  const handleCambioFiltroSede = (sede: 'TODAS' | 'ica' | 'huancayo') => {
-    setFiltroSede(sede);
     setPagina(1);
   };
 
@@ -188,7 +185,7 @@ export default function AdminInventarioPage() {
 
   const stockActualProd = useMemo(() => {
     if (!productoSeleccionado) return 0;
-    if (sedeModal === 'huancayo') {
+    if (sedeActiva === 'huancayo') {
       return typeof productoSeleccionado.stock_huancayo === 'number'
         ? productoSeleccionado.stock_huancayo
         : 0;
@@ -196,7 +193,7 @@ export default function AdminInventarioPage() {
     return typeof productoSeleccionado.stock_ica === 'number'
       ? productoSeleccionado.stock_ica
       : (typeof productoSeleccionado.stock === 'number' ? productoSeleccionado.stock : 0);
-  }, [productoSeleccionado, sedeModal]);
+  }, [productoSeleccionado, sedeActiva]);
 
   const cantParsed = parseInt(cantidad, 10) || 0;
 
@@ -238,7 +235,7 @@ export default function AdminInventarioPage() {
 
     if (stockInsuficiente) {
       setFormError(
-        `Stock insuficiente en Sede ${sedeModal === 'huancayo' ? 'Huancayo' : 'Ica'}. Solo cuenta con ${stockActualProd} unidades disponibles.`
+        `Stock insuficiente en Sede ${sedeActiva === 'huancayo' ? 'Huancayo' : 'Ica'}. Solo cuenta con ${stockActualProd} unidades disponibles.`
       );
       return;
     }
@@ -249,7 +246,7 @@ export default function AdminInventarioPage() {
         producto_id: selectedProdId,
         tipo: tipoMov,
         cantidad: cantParsed,
-        sede: sedeModal,
+        sede: sedeActiva,
         motivo: motivo.trim(),
         usuario_nombre: 'Diego Galindo (Admin)',
       });
@@ -262,7 +259,7 @@ export default function AdminInventarioPage() {
         setShowModalMovimiento(false);
         setCantidad('');
         setMotivo('');
-        setToastMessage(`¡Movimiento registrado con éxito en Sede ${sedeModal.toUpperCase()}!`);
+        setToastMessage(`¡Movimiento registrado con éxito en Sede ${sedeActiva.toUpperCase()}!`);
         setTimeout(() => setToastMessage(null), 4000);
       } else {
         setFormError(res.error || 'Ocurrió un error al guardar el movimiento');
@@ -397,10 +394,10 @@ export default function AdminInventarioPage() {
             onClick={() => {
               setFormTrasladoError(null);
               setSelectedProdTrasladoId(productos[0]?.id || '');
-              setSedeOrigen('ica');
-              setSedeDestino('huancayo');
+              setSedeOrigen(sedeActiva);
+              setSedeDestino(sedeActiva === 'ica' ? 'huancayo' : 'ica');
               setCantidadTraslado('');
-              setMotivoTraslado('Reabastecimiento de sede');
+              setMotivoTraslado(`Traslado de mercadería desde ${sedeActiva === 'ica' ? 'Ica' : 'Huancayo'}`);
               setShowModalTraslado(true);
             }}
             className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl text-xs font-bold bg-white text-zinc-900 border border-zinc-300 hover:bg-zinc-50 shadow-xs transition-all active:scale-95"
@@ -517,17 +514,6 @@ export default function AdminInventarioPage() {
 
           {/* Filtros por Sede, Producto y Tipo */}
           <div className="flex flex-wrap items-center gap-2">
-            {/* Filtro por Sede */}
-            <select
-              value={filtroSede}
-              onChange={(e) => handleCambioFiltroSede(e.target.value as 'TODAS' | 'ica' | 'huancayo')}
-              className="px-3 py-2 bg-zinc-50 border border-zinc-200 rounded-xl text-xs text-zinc-700 outline-none focus:border-black font-semibold cursor-pointer"
-            >
-              <option value="TODAS">Todas las Sedes</option>
-              <option value="ica">Sede Ica</option>
-              <option value="huancayo">Sede Huancayo</option>
-            </select>
-
             {/* Filtro por Producto */}
             <select
               value={filtroProductoId}
@@ -870,40 +856,17 @@ export default function AdminInventarioPage() {
             )}
 
             <form onSubmit={handleRegistrarMovimiento} className="space-y-4 text-xs">
-              {/* Sede Afectada */}
-              <div>
-                <label className="block font-bold text-zinc-700 uppercase tracking-wider mb-1.5">
-                  Sede de la Operación *
-                </label>
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setSedeModal('ica')}
-                    className={`p-2.5 rounded-xl border text-xs font-bold text-left transition-all cursor-pointer ${
-                      sedeModal === 'ica'
-                        ? 'bg-zinc-950 text-white border-zinc-950 shadow-xs'
-                        : 'bg-zinc-50 text-zinc-600 border-zinc-200 hover:bg-zinc-100'
-                    }`}
-                  >
-                    <p>Sede Ica</p>
-                    <span className="text-[10px] opacity-75 font-normal">
-                      Stock: {productoSeleccionado ? (productoSeleccionado.stock_ica ?? productoSeleccionado.stock) : 0} un.
-                    </span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setSedeModal('huancayo')}
-                    className={`p-2.5 rounded-xl border text-xs font-bold text-left transition-all cursor-pointer ${
-                      sedeModal === 'huancayo'
-                        ? 'bg-zinc-950 text-white border-zinc-950 shadow-xs'
-                        : 'bg-zinc-50 text-zinc-600 border-zinc-200 hover:bg-zinc-100'
-                    }`}
-                  >
-                    <p>Sede Huancayo</p>
-                    <span className="text-[10px] opacity-75 font-normal">
-                      Stock: {productoSeleccionado ? (productoSeleccionado.stock_huancayo ?? 0) : 0} un.
-                    </span>
-                  </button>
+              {/* Sede Afectada (Global) */}
+              <div className="bg-zinc-50 border border-zinc-200 p-3 rounded-xl flex items-center justify-between">
+                <div>
+                  <span className="block text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-0.5">Sede Operativa</span>
+                  <p className="text-xs font-bold text-zinc-900">
+                    Sede {sedeActiva === 'ica' ? 'Ica' : 'Huancayo'}
+                  </p>
+                </div>
+                <div className="text-right">
+                  <span className="block text-[10px] text-zinc-500">Stock Actual</span>
+                  <p className="text-xs font-mono font-bold text-emerald-600">{stockActualProd} un.</p>
                 </div>
               </div>
 
@@ -918,10 +881,10 @@ export default function AdminInventarioPage() {
                   className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-50 border border-zinc-300 text-zinc-950 font-medium outline-none focus:border-black focus:bg-white transition-all text-xs"
                 >
                   {productos.map((p) => {
-                    const stockSede = sedeModal === 'huancayo' ? (p.stock_huancayo ?? 0) : (p.stock_ica ?? p.stock);
+                    const stockSede = sedeActiva === 'huancayo' ? (p.stock_huancayo ?? 0) : (p.stock_ica ?? p.stock);
                     return (
                       <option key={p.id} value={p.id}>
-                        {p.nombre} — SKU: {p.sku} (Stock en {sedeModal === 'huancayo' ? 'Huancayo' : 'Ica'}: {stockSede} un.)
+                        {p.nombre} — SKU: {p.sku} (Stock disponible: {stockSede} un.)
                       </option>
                     );
                   })}

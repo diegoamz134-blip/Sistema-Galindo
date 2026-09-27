@@ -38,12 +38,7 @@ export function AdminBottomNav({ onOpenMobileMenu }: AdminBottomNavProps) {
       icon: Package,
       isActive: pathname.startsWith('/admin/productos'),
     },
-    {
-      href: '/admin/caja',
-      label: 'Caja',
-      icon: CircleDollarSign,
-      isActive: pathname.startsWith('/admin/caja'),
-    },
+
   ];
 
   return (
@@ -51,7 +46,7 @@ export function AdminBottomNav({ onOpenMobileMenu }: AdminBottomNavProps) {
       aria-label="Navegación inferior móvil"
       className="fixed bottom-0 inset-x-0 z-30 bg-white/95 backdrop-blur-md border-t border-zinc-200/90 lg:hidden shadow-[0_-4px_20px_rgba(0,0,0,0.06)] px-2 pt-1 pb-[calc(env(safe-area-inset-bottom)+0.35rem)]"
     >
-      <div className="grid grid-cols-5 items-center justify-around max-w-md mx-auto">
+      <div className="grid grid-cols-4 items-center justify-around max-w-md mx-auto">
         {NAV_ITEMS.map((item) => {
           const Icon = item.icon;
           return (

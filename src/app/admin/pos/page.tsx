@@ -17,13 +17,8 @@ import {
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { Producto, MetodoPago } from '@/types/database';
-import {
-  getPOSProducts,
-  procesarVentaPOS,
-  VentaItemPOS,
-  VentaPOSData,
-} from '@/lib/pos-service';
-import { SEDES, SedeId, DEFAULT_SEDE_ID } from '@/lib/constants';
+import { getPOSProducts, procesarVentaPOS, VentaItemPOS, VentaPOSData } from '@/lib/pos-service';
+import { useSede } from '@/context/SedeContext';
 import { generateCode } from '@/lib/utils';
 import { POSProductCatalog } from '@/components/admin/pos/POSProductCatalog';
 import { POSCartTicket } from '@/components/admin/pos/POSCartTicket';
@@ -33,10 +28,7 @@ import { POSSalesHistoryModal } from '@/components/admin/pos/POSSalesHistoryModa
 
 export default function POSPage() {
   const { user, userMeta } = useAuth();
-
-  // Sede activa en el POS (Ica o Huancayo)
-  const [sedeId, setSedeId] = useState<SedeId>(DEFAULT_SEDE_ID);
-  const sedeActual = SEDES[sedeId] || SEDES['ica'];
+  const { sedeActiva: sedeId, sedeInfo: sedeActual } = useSede();
 
   // Catálogo de Productos
   const [productos, setProductos] = useState<Producto[]>([]);
@@ -97,20 +89,10 @@ export default function POSPage() {
     cargarProductos();
   }, [cargarProductos]);
 
-  // Cambiar de sede de manera segura
-  const handleCambiarSede = (nuevaSede: SedeId) => {
-    if (nuevaSede === sedeId) return;
-    if (cartItems.length > 0) {
-      const confirmar = window.confirm(
-        `Tienes artículos en el ticket de mostrador de ${sedeActual.nombre}. Cambiar a Sede ${SEDES[nuevaSede].ciudad} reiniciará el ticket actual para evitar mezclas de inventario. ¿Deseas continuar?`
-      );
-      if (!confirmar) return;
-      setCartItems([]);
-    }
-    setSedeId(nuevaSede);
-  };
-
-
+  // Limpiar el carrito si se cambia de sede desde el panel global
+  useEffect(() => {
+    setCartItems([]);
+  }, [sedeId]);
 
   // Agregar producto al ticket
   const handleAddToCart = (producto: Producto) => {
@@ -289,34 +271,8 @@ export default function POSPage() {
           </div>
         </div>
 
-        {/* Controles de Sede, Reloj y Turno */}
+        {/* Controles de Reloj y Turno */}
         <div className="flex items-center gap-2 sm:gap-3 text-xs">
-          {/* Selector de Sede */}
-          <div className="flex items-center rounded-xl bg-zinc-100 p-1 border border-zinc-200">
-            <button
-              type="button"
-              onClick={() => handleCambiarSede('ica')}
-              className={`px-2.5 py-1 rounded-lg font-bold transition-all cursor-pointer ${
-                sedeId === 'ica'
-                  ? 'bg-white text-zinc-950 shadow-2xs'
-                  : 'text-zinc-500 hover:text-zinc-900'
-              }`}
-            >
-              Ica
-            </button>
-            <button
-              type="button"
-              onClick={() => handleCambiarSede('huancayo')}
-              className={`px-2.5 py-1 rounded-lg font-bold transition-all cursor-pointer ${
-                sedeId === 'huancayo'
-                  ? 'bg-white text-zinc-950 shadow-2xs'
-                  : 'text-zinc-500 hover:text-zinc-900'
-              }`}
-            >
-              Huancayo
-            </button>
-          </div>
-
           {/* Reloj y Cajero */}
           <div className="hidden lg:flex flex-col text-right font-mono text-[11px] leading-tight">
             <span className="font-bold text-zinc-900 flex items-center justify-end gap-1">

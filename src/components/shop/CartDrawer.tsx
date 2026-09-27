@@ -264,8 +264,7 @@ export function CartDrawer({
                       onClick={onClose}
                       className="w-full py-3.5 rounded-xl font-bold text-xs bg-black text-white hover:bg-zinc-800 transition-all uppercase tracking-wider shadow-md flex items-center justify-center gap-2 group text-center cursor-pointer active:scale-95"
                     >
-                      <Ticket className="w-4 h-4" />
-                      <span>Ir al Checkout & Ticket</span>
+                      <span>Finalizar Compra</span>
                       <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
                     </Link>
 

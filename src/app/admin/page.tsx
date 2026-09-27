@@ -32,8 +32,10 @@ import { MovimientoCaja, Matricula } from '@/types/database';
 import { SalesTrendChart } from '@/components/admin/dashboard/SalesTrendChart';
 import { TopProductsRanking } from '@/components/admin/dashboard/TopProductsRanking';
 import { PaymentMethodsDonut } from '@/components/admin/dashboard/PaymentMethodsDonut';
+import { useSede } from '@/context/SedeContext';
 
 export default function AdminDashboardPage() {
+  const { sedeActiva, sedeInfo } = useSede();
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [movimientos, setMovimientos] = useState<MovimientoCaja[]>([]);
   const [matriculas, setMatriculas] = useState<Matricula[]>([]);
@@ -50,10 +52,10 @@ export default function AdminDashboardPage() {
     async function init() {
       try {
         const [sumData, movData, matData, pedData] = await Promise.all([
-          getDashboardSummary(),
+          getDashboardSummary(sedeActiva),
           getRecentMovements(),
           getActiveStudents(),
-          getRecentOrders(6),
+          getRecentOrders(6, sedeActiva),
         ]);
         if (!isMounted) return;
         setSummary(sumData);
@@ -75,19 +77,27 @@ export default function AdminDashboardPage() {
 
     init();
 
+    // Recargar cuando cambia la sede
+    const handleSedeChange = () => {
+      setIsLoading(true);
+      init();
+    };
+    window.addEventListener('galindo_sede_changed', handleSedeChange);
+
     return () => {
       isMounted = false;
+      window.removeEventListener('galindo_sede_changed', handleSedeChange);
     };
-  }, []);
+  }, [sedeActiva]);
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
     try {
       const [sumData, movData, matData, pedData] = await Promise.all([
-        getDashboardSummary(),
+        getDashboardSummary(sedeActiva),
         getRecentMovements(),
         getActiveStudents(),
-        getRecentOrders(6),
+        getRecentOrders(6, sedeActiva),
       ]);
       setSummary(sumData);
       setMovimientos(movData);
@@ -182,13 +192,6 @@ export default function AdminDashboardPage() {
           </button>
 
           <Link
-            href="/admin/caja"
-            className="px-3 py-1.5 rounded-xl text-xs font-medium bg-white border border-zinc-200 hover:border-zinc-300 text-zinc-800 shadow-xs transition-colors"
-          >
-            Registrar en Caja
-          </Link>
-
-          <Link
             href="/admin/productos"
             className="px-3 py-1.5 rounded-xl text-xs font-medium bg-white border border-zinc-200 hover:border-zinc-300 text-zinc-800 shadow-xs transition-colors"
           >
@@ -205,8 +208,8 @@ export default function AdminDashboardPage() {
         </div>
       </div>
 
-      {/* 4 Tarjetas de Métricas Principales (KPIs) */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* 3 Tarjetas de Métricas Principales (KPIs) */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {/* KPI 1: Cobros Hoy */}
         <div className="p-5 rounded-2xl bg-white border border-zinc-200 shadow-sm relative overflow-hidden group hover:border-zinc-300 transition-all">
           <div className="flex items-center justify-between">
@@ -237,26 +240,6 @@ export default function AdminDashboardPage() {
           </div>
         </div>
 
-        {/* KPI 2: Efectivo en Caja */}
-        <div className="p-5 rounded-2xl bg-white border border-zinc-200 shadow-sm relative overflow-hidden group hover:border-zinc-300 transition-all">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-zinc-500 uppercase tracking-wider font-mono">
-              Efectivo en Caja
-            </span>
-            <div className="w-8 h-8 rounded-xl bg-zinc-100 text-zinc-800 flex items-center justify-center border border-zinc-200">
-              <Wallet className="w-4 h-4" />
-            </div>
-          </div>
-          <div className="mt-3">
-            <p className="text-2xl font-bold font-mono text-zinc-950 tracking-tight">
-              {isLoading ? '...' : formatCurrency(summary?.efectivoCaja || 0)}
-            </p>
-            <div className="flex items-center justify-between mt-2 text-[11px]">
-              <span className="text-zinc-500">Gaveta física</span>
-              <span className="text-zinc-400 font-mono">Turno Abierto</span>
-            </div>
-          </div>
-        </div>
 
         {/* KPI 3: Alumnos Activos */}
         <div className="p-5 rounded-2xl bg-white border border-zinc-200 shadow-sm relative overflow-hidden group hover:border-zinc-300 transition-all">

@@ -16,6 +16,7 @@ import {
   AlertCircle,
   UploadCloud,
   RefreshCw,
+  Star,
 } from 'lucide-react';
 import { Curso, TurnoOption } from '@/types/database';
 import { CursoInput, guardarCurso, DEFAULT_TURNOS } from '@/lib/academia-service';
@@ -82,6 +83,7 @@ export function CursoFormModal({
   );
   const [imagenUrl, setImagenUrl] = useState('');
   const [activo, setActivo] = useState(true);
+  const [destacado, setDestacado] = useState(false);
 
   // Lista interactiva de turnos y horarios de estudio
   const [turnos, setTurnos] = useState<TurnoOption[]>(DEFAULT_TURNOS);
@@ -108,6 +110,7 @@ export function CursoFormModal({
       setImagenPesoKb(null);
       setShowUrlInput(false);
       setActivo(cursoAEditar.activo !== false);
+      setDestacado(Boolean(cursoAEditar.destacado));
 
       // Cargar turnos u horarios configurados
       if (Array.isArray(cursoAEditar.turnos) && cursoAEditar.turnos.length > 0) {
@@ -145,6 +148,7 @@ export function CursoFormModal({
       setImagenPesoKb(null);
       setShowUrlInput(false);
       setActivo(true);
+      setDestacado(false);
       setTurnos(DEFAULT_TURNOS);
       setTemario([
         'Fundamentos de barbería y ergonomía',
@@ -285,6 +289,7 @@ export function CursoFormModal({
         descripcion_kit: undefined,
         imagen_url: imagenUrl,
         activo,
+        destacado,
         turnos,
       };
 
@@ -888,6 +893,32 @@ export function CursoFormModal({
                 className="sr-only peer"
               />
               <div className="w-9 h-5 bg-zinc-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-zinc-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-600"></div>
+            </label>
+          </div>
+
+          {/* 8. DESTACAR COMO RECOMENDADO EN PORTADA */}
+          <div className="p-3.5 rounded-xl border border-amber-200 bg-amber-50/40 flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              <div className="w-7 h-7 rounded-lg bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
+                <Star className="w-4 h-4 fill-amber-500 text-amber-600" />
+              </div>
+              <div>
+                <span className="font-bold text-zinc-950 block text-xs">
+                  Mostrar como Curso Recomendado en la Portada
+                </span>
+                <p className="text-[11px] text-zinc-600">
+                  Aparecerá en la sección principal con la información destacada y el botón &quot;Ver más cursos&quot;.
+                </p>
+              </div>
+            </div>
+            <label className="relative inline-flex items-center cursor-pointer">
+              <input
+                type="checkbox"
+                checked={destacado}
+                onChange={(e) => setDestacado(e.target.checked)}
+                className="sr-only peer"
+              />
+              <div className="w-9 h-5 bg-zinc-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-zinc-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-amber-500"></div>
             </label>
           </div>
 
