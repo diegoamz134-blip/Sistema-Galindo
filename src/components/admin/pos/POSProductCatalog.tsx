@@ -131,6 +131,14 @@ export function POSProductCatalog({
     return () => clearTimeout(timer);
   }, [searchTerm]);
 
+  const categoriesScrollRef = useRef<HTMLDivElement>(null);
+
+  const handleScrollWheel = (e: React.WheelEvent<HTMLDivElement>) => {
+    if (categoriesScrollRef.current) {
+      categoriesScrollRef.current.scrollLeft += e.deltaY;
+    }
+  };
+
   // Filtrado estricto por sede activa:
   // Si estamos en Huancayo, SOLO se muestran productos con stock_huancayo > 0.
   // Si estamos en Ica, SOLO productos con stock_ica > 0 (o stock general > 0).
@@ -440,7 +448,11 @@ export function POSProductCatalog({
         </div>
 
         {/* Píldoras de Categorías (solo con productos en esta sede) */}
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none text-xs">
+        <div 
+          ref={categoriesScrollRef}
+          onWheel={handleScrollWheel}
+          className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none text-xs"
+        >
           <button
             type="button"
             onClick={() => setCategoriaSeleccionada('TODAS')}

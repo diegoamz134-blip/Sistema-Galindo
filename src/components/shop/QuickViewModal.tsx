@@ -109,65 +109,7 @@ export function QuickViewModal({
                   {producto.descripcion}
                 </p>
 
-                {/* Disponibilidad transparente por Sede */}
-                <div className="p-2.5 rounded-xl bg-zinc-50 border border-zinc-200 space-y-1.5">
-                  <div className="flex items-center justify-between text-[10px] font-mono font-bold text-zinc-500 uppercase">
-                    <span>Disponibilidad por Sede:</span>
-                    <span>Total: {stockIca + stockHuancayo} un.</span>
-                  </div>
 
-                  <div className="grid grid-cols-2 gap-2">
-                    {/* Sede Ica */}
-                    <button
-                      type="button"
-                      onClick={() => setSedeSeleccionada('ica')}
-                      className={`p-2 rounded-lg border text-left transition-all cursor-pointer ${
-                        sedeSeleccionada === 'ica'
-                          ? 'bg-zinc-900 text-white border-black shadow-xs'
-                          : 'bg-white hover:bg-zinc-100 border-zinc-200 text-zinc-800'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between">
-                        <span className="text-[10px] font-bold">Sede Ica</span>
-                        {sedeSeleccionada === 'ica' && <Check className="w-3 h-3 text-emerald-400" />}
-                      </div>
-                      <div className="mt-0.5 flex items-baseline justify-between">
-                        <span className={`text-xs font-bold font-mono ${
-                          stockIca > 0 
-                            ? (sedeSeleccionada === 'ica' ? 'text-emerald-400' : 'text-emerald-700') 
-                            : 'text-zinc-400'
-                        }`}>
-                          {stockIca > 0 ? `${stockIca} un.` : 'Agotado'}
-                        </span>
-                      </div>
-                    </button>
-
-                    {/* Sede Huancayo */}
-                    <button
-                      type="button"
-                      onClick={() => setSedeSeleccionada('huancayo')}
-                      className={`p-2 rounded-lg border text-left transition-all cursor-pointer ${
-                        sedeSeleccionada === 'huancayo'
-                          ? 'bg-zinc-900 text-white border-black shadow-xs'
-                          : 'bg-white hover:bg-zinc-100 border-zinc-200 text-zinc-800'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between">
-                        <span className="text-[10px] font-bold">Sede Huancayo</span>
-                        {sedeSeleccionada === 'huancayo' && <Check className="w-3 h-3 text-emerald-400" />}
-                      </div>
-                      <div className="mt-0.5 flex items-baseline justify-between">
-                        <span className={`text-xs font-bold font-mono ${
-                          stockHuancayo > 0 
-                            ? (sedeSeleccionada === 'huancayo' ? 'text-emerald-400' : 'text-emerald-700') 
-                            : 'text-zinc-400'
-                        }`}>
-                          {stockHuancayo > 0 ? `${stockHuancayo} un.` : 'Agotado'}
-                        </span>
-                      </div>
-                    </button>
-                  </div>
-                </div>
 
                 {/* Sellos de Confianza */}
                 <div className="pt-1 flex flex-wrap gap-2 text-[10px] text-zinc-500 font-medium">

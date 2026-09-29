@@ -1,0 +1,220 @@
+import csv
+import io
+import uuid
+import re
+
+data = """Código	Producto/Servicio	Precio Venta	Stock
+PROD0001	AGUJAS DE CARTUCHO N°1005CM-Tattoo	5	147
+PROD0002	AGUJAS DE CARTUCHO N°1007RM-1-Tattoo	5	3
+PROD0003	AGUJAS DE CARTUCHO N°1009RM-1-Tattoo	5	0
+PROD0004	AGUJAS DE CARTUCHO N°1011RM-1-Tattoo	5	0
+PROD0005	AGUJAS DE CARTUCHO N°1013RM-1-Tattoo	5	0
+PROD0007	AGUJAS DE CARTUCHO N°1207M1-Tattoo	5	0
+PROD0008	AGUJAS DE CARTUCHO N°1221M1-Tattoo	5	42
+PROD0009	AGUJAS DE CARTUCHO N°1223M1-Tattoo	5	17
+PROD0010	AGUJAS DE CARTUCHO N°1221CM-Tattoo	5	0
+PROD0012	AGUJAS DE CARTUCHO N°1009CM-Tattoo ICA	5	56
+PROD0013	AGUJAS DE CARTUCHO N°1011CM-Tattoo	5	104
+PROD0017	AGUJAS DE CARTUCHO N°1003RL-Tattoo	5	14
+PROD0018	AGUJAS DE CARTUCHO N°1005RL-Tattoo	5	5
+PROD0019	AGUJAS DE CARTUCHO N°1007RL-Tattoo	5	0
+PROD0020	AGUJAS DE CARTUCHO N°1009RL-Tattoo	5	67
+PROD0021	AGUJAS DE CARTUCHO N°1011RL-Tattoo	5	78
+PROD0022	AGUJAS DE CARTUCHO N°C1014RL-Tattoo	5	50
+PROD0023	AGUJAS DE CARTUCHO N°1209RS-Tattoo	5	0
+PROD0025	AGUJAS DE BARILLA 10A07RL-Tattoo	3.5	420
+PROD0027	AGUJAS DE BARILLA 12C09RM-Tattoo	3.5	23
+PROD0029	AGUJAS DE BARILLA 10A03RL-Tattoo	3.5	339
+PROD0030	TINTE YELLOW -Tattoo	15	53
+PROD0044	MAQUINA DE TATUAR-Tattoo	990	2
+PROD0045	CUBRE GRIP-Tattoo	7	28
+PROD0046	GEL STENCIL GRANDE 17OZ-Tattoo	139	3
+PROD0047	ESPUMA DE LIMPIEZA -Tattoo	87	2
+PROD0048	SAMBLOM 8 OZ - Tattoo	30	2
+PROD0049	TINTA TBK - TRIPLE -BLACK	220	2
+PROD0050	GUANTES TALLA M-Tattoo NEGRO	2	19
+PROD0051	GUANTES TALLA S-Tattoo - NEGRO	2	0
+PROD0053	GUANTES TALLA L-Tattoo - NEGRO	2	0
+PROD0054	FILM 6 pulgadas-Tattoo	15	4
+PROD0055	DILUENTE 2 OZ- 60ML Tattoo - MEDIANA	20	0
+PROD0056	PAPEL CAMPO NEGRO-Tattoo	3	390
+PROD0057	CINTA NEGRA-Tattoo	5	25
+PROD0058	VASELINA SOLIDA GRANDE-Tattoo	38	8
+PROD0061	CREMA SICATRIZANTE-Tattoo	3	59
+PROD0062	GEL STENCIL 4.5 OZ-Tattoo	75	0
+PROD0064	PISETA GRANDE 250 ML-TATTO	15	7
+PROD0066	PAPEL HECTOGRAFICO NEGRO-Tattoo	7	142
+PROD0067	TINTAS COLORES 1OZ-Tattoo	75	13
+PROD0069	PLUMONES SHARPIE-Tattoo	10	7
+PROD0070	CATETER N°20-Tattoo	5	100
+PROD0071	PIEL SINTETICA GRANDE-Tattoo	50	5
+PROD0072	BAJA LENGUA-Tattoo	1	134
+PROD0073	SOMBRERO DE MAQUINA DE BOBINA-Tattoo	5	18
+PROD0089	CAPS CHICO 11-8 mm Tattoo	5	0
+PROD0090	CAPS MEDIANO 17-20 mm-Tattoo	5	48
+PROD0092	CATETER N°18-Tattoo	5	100
+PROD0093	CATETER N° 16-Tattoo	5	99
+PROD0094	DYNAMIC BLACK 8 OZ-Tattoo	180	0
+PROD0095	DYNAMIC TRIPLE BLACK 8 OZ-Tattoo	230	2
+PROD0102	VASELINA SOLIDA CHICA-Tattoo	25	3
+PROD0102	GEL STENCIL 60 ml 2 OZ -Tattoo	45	0
+PROD0104	AGUJA DE CARTUCHO N° 5RS-Tattoo	5	0
+PROD0105	AGUJA DE CARTUCHO N° 7RS-Tattoo	5	0
+H2SK8C0	MAQUINA DE TATUAJE 730-Tattoo	730	0
+CTL8P5N	MAQUINA DE TATUAJE 700-Tattoo	700	0
+DNA1DL9	MAQUINA DE TATUAJE 800-Tattoo	800	0
+56NXWBL	MAQUINA DE TATUAJE 750-Tattoo	750	0
+CRN02NZ	MAQUINA DE TATUAJE 820-Tattoo	820	0
+1016YFH	APOYA BRAZO-Tattoo	160	0
+CUFNQTX	FRASCO DE TINTA NUEVO-Tattoo	5	30
+5DEPJSH	PEINETA PROFESIONAL-Tattoo	120	2
+66UNXXJ	AGUJAS DE BARILLA 13M-Tattoo	3.5	475
+6FDKOR4	PAPEL CAMPO AZUL-Tattoo	3	248
+HFXNHQU	PAPEL CAMPO ROSADO-Tattoo	3	240
+T4YVHEC	PAPEL CAMPO MORADO-Tattoo	3	124
+OH2FEL1	AGUJA CARTUCHO 5RM-Tattoo	5	0
+01KBJDL	PIGMENTO CETRO-Tattoo- BOTELLA	25	9
+PROD0024	AGUJAS DE CARTUCHOS N- 1013CM	5	25
+PROD000124	CUCHILLAS - MAGIC- CLIP - ICA - TATTO	65	7
+PROD000125	CUCHILLA VGR -ICA - TATTO	75	2
+PD000126	PIGMENTO EN POLVO DISEÑOS - ICA - TATTO	12	0
+PD000126	SHAVER  - JRL - ICA- TATTO	360	0
+PD000127	PROFESIONAL TRIMMER - JRL - ICA- TATTO	590	1
+PD000128	AEROGRAFO PROFESIONAL - ICA - TATTO	230	2
+PD000129	SECADORA - BABYLISSPRO - ICA - TATTO	260	10
+PD000130	SHAVER WARRIOR BASICA - NEGRO - ICA - TATTO	250	2
+PD000131	SHAVER WARRIOR BASICA - VERDE - ICA - TATTO	250	5
+PD000132	TRIMMER BABYLISSPRO PORFESIONAL - ICA - TATTO	490	6
+PD000133	CERA VERDE - ICA - TATTO	18	0
+PD000134	JAKE BLACK PARA DISEÑO - ICA - TATTO	25	0
+PD00000135	PINZAS DE PIERCING - TATTO	75	4
+PD0000136	ANDIS SHAVER PLUS - ICA - TATTO	290	0
+PD0000137	SLIMLINE PRO TRIMMER ANDIS - ICA - TATTO	290	4
+PD0000138	WAHL - MAGIC-CLIP CON CABLE - ICA- TATTO	209	4
+PD0000139	SENIOR WAHL NEGRO SIN CABLE - ICA - TATTO	549	2
+PD0000140	WAHL MAGIC CLIP SIN CABLE - ICA - TATTO	359	0
+PD000141	JOYAS DE PLATA -ICA- TATTO	50	11
+PD000167	SHADER SOLUTION - 4 OZ - 120ML , ICA- TATTO	40	6
+PDMMKWAMKL	PISETA PEQUEÑA 150 ML- TATTO	10	6
+UEJDRJKF	TINTA DYNAMIC - BLK - OUT-	280	2
+PROD0016	PIEL SINTETICA - PEQUEÑA - ICA - TATTO - COLOR DE PIEL	10	7
+PROD0016	PIEL SINTETICA - BLANCA - ICA - Tatto	10	7
+PROD0016	TINTA NEGRA - DYNAMIC TBK TRIPLE BLACK - 30ML - MEDIANA	75	1
+PROD0016	TINTA NEGRA 1 OZ SIN ETIQUETA -BLACK	75	9
+PROD0016	AGUJAS DE CARTUCHO N°1001RL-Tattoo	5	37
+PROD009588	ANESTESIA EN CREMA PEQUEÑA - TTATO - ICA	69	2
+2513	GECKO STENCIL 30 ml 1 OZ - Tattoo	38	0
+3186	MAQUINA PEN POSEIDON	299	0
+PROD009588	COYAR DE PLATA - ICA - TATTO	50	25
+PROD0016	AGUJAS DE CARTUCHO N°1019 CM -Tattoo	5	11
+PROD0016	TINTA MARON	75	4
+PROD0016	GEL STENCIL 1FL OZ SIN ETIQUETA-Tattoo	35	16
+PROD0016	TINTA NEGRA TRIPLE BLACK PEQUEÑA 1/2 OZ SIN ETIQUETA-TATTOO	35	9
+PROD0016	PARCHE GECKO DE TATTO	10	25
+YFM06PL	AFEITADOR	2	46
+MNX9E2T	TINTA BLANCA PEQUEÑA 0.5 OZ- TATTOO	35	0
+0FNFQBU	AGUJAS DE CARTUCHO 1023 cm - TATTOO	5	0
+O3DJS3W	AGUJAS DE BARILLA 10A05RL-Tattoo	3.5	446
+IMRO3UX	AGUJAS DE CARTUCHO N°1007CM-Tattoo	5	84
+7M6SCNY	FILM 9 pulgadas-Tattoo	20	4
+74VJKB1	PAPEL TOALLA - Tatto	3	2
+8VFK02G	VASELINA - Tattoo	3	16
+K9YJVKG	ANESTESIA ESPUMA PAINLESS- TATTOO	80	2
+TPM9EA0	TINTA ROJA 1/2 OZ - TATTOO	45	1
+23IIC4V	AGUJA PARA PIERCING Nº 14 - TATTOO	5	50
+8BWUSS2	AGUJA DE PIERCING Nº 16 - TATTOO	5	50
+GUZ6F3J	AGUJA DE PIERCING Nº 18 - TATTOO	5	49
+ANS3OR9	TINTA BLANCA 1OZ SIN ETIQUETA - TATTOO	75	6
+0H5HB4S	TINTA COLORES MUST-HAVES SET - TATTOO	38	7
+484GKGA	FERIA PIRCING Acero- TATTOO	10	29
+3LEC6IX	FERIA PIRCING Titanio - TATTOO	30	97
+WJU26PJ	VINO GALINDO	50	4
+YI1DNNJ	PIGMENTO	130	12
+8X6KIC3	PIEL SINTETICA ROSTRO - TATTO	25	2"""
+
+def slugify(text):
+    text = text.lower()
+    text = re.sub(r'[^a-z0-9]+', '-', text)
+    return text.strip('-')
+
+categories = {
+    'Maquinas de Corte (Clippers)': ['MAGIC', 'SENIOR', 'CLIP'],
+    'Patilleras y Trimmers': ['TRIMMER', 'SLIMLINE'],
+    'Afeitadoras (Shavers)': ['SHAVER', 'AFEITADOR'],
+    'Tijeras & Navajas': ['CUCHILLA', 'BAJA LENGUA'],
+    'Pomadas, Ceras y Quimicos': ['CERA', 'GEL', 'ESPUMA', 'DILUENTE', 'CREMA', 'ANESTESIA', 'VASELINA', 'SOLUTION'],
+    'Accesorios & Capas': ['GUANTES', 'PIEL', 'PAPEL', 'FILM', 'CINTA', 'PISETA', 'PLUMON', 'CAPS', 'PARCHE', 'PEINETA', 'APOYA BRAZO', 'PINZAS', 'SAMBLOM'],
+    'Insumos Tattoo & Piercing': ['CATETER', 'PIERCING', 'PIRCING', 'JOYAS', 'COYAR', 'MAQUINA DE TATUAR', 'MAQUINA DE TATUAJE', 'MAQUINA PEN'],
+    'Herramientas y Accesorios': ['AEROGRAFO', 'SECADORA', 'CUBRE GRIP', 'SOMBRERO'],
+    'Agujas y Cartuchos Tattoo': ['AGUJA'],
+    'Tintas Tattoo': ['TINTE', 'TINTA', 'DYNAMIC', 'PIGMENTO', 'BLACK'],
+    'Ropa y Merchandising': ['VINO'],
+}
+
+def get_category(name):
+    name_upper = name.upper()
+    for cat, keywords in categories.items():
+        for keyword in keywords:
+            if keyword in name_upper:
+                return cat
+    return 'Herramientas y Accesorios'
+
+seen_skus = set()
+
+sql_lines = []
+sql_lines.append("-- =========================================================================")
+sql_lines.append("-- SCRIPT DE INSERCIÓN: INVENTARIO SEDE ICA (TATTOO / BARBERÍA) CATEGORIZADO")
+sql_lines.append("-- =========================================================================")
+sql_lines.append("")
+
+# Delete the previously inserted category if we don't need it (optional)
+# sql_lines.append("DELETE FROM categorias WHERE id = '44444444-4444-4444-4444-444444444444';")
+
+sql_lines.append("INSERT INTO productos (")
+sql_lines.append("    id, sku, nombre, slug, categoria_id, descripcion, ")
+sql_lines.append("    precio_compra, precio_venta, stock_ica, stock_huancayo, stock_minimo, ")
+sql_lines.append("    imagenes, destacado, en_oferta, activo, creado_en, actualizado_en")
+sql_lines.append(") VALUES ")
+
+values = []
+reader = csv.reader(io.StringIO(data), delimiter='\t')
+next(reader) # skip header
+for row in reader:
+    if len(row) != 4:
+        continue
+    sku = row[0].strip()
+    nombre = row[1].strip()
+    precio = row[2].strip()
+    stock = row[3].strip()
+    
+    # Handle duplicate skus
+    original_sku = sku
+    counter = 1
+    while sku in seen_skus:
+        sku = f"{original_sku}-{counter}"
+        counter += 1
+    seen_skus.add(sku)
+    
+    slug = slugify(nombre) + "-" + slugify(sku)
+    descripcion = f"Producto de tienda: {nombre}"
+    id_val = f"'{uuid.uuid4()}'"
+    
+    cat_name = get_category(nombre)
+    cat_subquery = f"(SELECT id FROM categorias WHERE nombre = '{cat_name}' LIMIT 1)"
+    
+    v = f"({id_val}, '{sku}', '{nombre}', '{slug}', {cat_subquery}, '{descripcion}', 0, {precio}, {stock}, 0, 0, ARRAY[]::text[], false, false, true, NOW(), NOW())"
+    values.append(v)
+
+sql_lines.append(",\n".join(values))
+sql_lines.append("ON CONFLICT (sku) DO UPDATE SET ")
+sql_lines.append("    nombre = EXCLUDED.nombre,")
+sql_lines.append("    categoria_id = EXCLUDED.categoria_id,")
+sql_lines.append("    precio_venta = EXCLUDED.precio_venta,")
+sql_lines.append("    stock_ica = EXCLUDED.stock_ica,")
+sql_lines.append("    descripcion = EXCLUDED.descripcion;")
+sql_lines.append("")
+
+with open("C:/Users/diego/OneDrive/Desktop/sistema-galindo/database/insertar_inventario_ica.sql", "w", encoding="utf-8") as f:
+    f.write("\n".join(sql_lines))
+
+print("SQL script generated!")

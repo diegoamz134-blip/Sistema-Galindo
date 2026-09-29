@@ -31,32 +31,187 @@ interface CursoFormModalProps {
   onCursoEliminado?: (cursoId: string) => Promise<void> | void;
 }
 
-const TEMAS_SUGERIDOS = [
-  'Fundamentos de barbería y ergonomía',
-  'Manejo de máquinas y peines guía',
-  'Técnicas de degradado Fade (Low, Mid, High)',
-  'Técnica de tijera sobre peine y texturizado',
-  'Afeitado clásico con toalla caliente y navaja',
-  'Perfilado de barba y visagismo capilar',
-  'Colorimetría: Decoloración global y platinados',
-  'Diseños freestyle y líneas urbanas',
-  'Bioseguridad, esterilización y servicio al cliente',
-];
 
-const IMAGENES_PRESET = [
-  {
-    label: 'Barbería Integral',
-    url: 'https://images.unsplash.com/photo-1503951914875-452162b0f3f1?auto=format&fit=crop&w=800&q=80',
-  },
-  {
-    label: 'Fade Avanzado',
-    url: 'https://images.unsplash.com/photo-1599351431202-1e0f0137899a?auto=format&fit=crop&w=800&q=80',
-  },
-  {
-    label: 'Tijera y Clásicos',
-    url: 'https://images.unsplash.com/photo-1621605815971-fbc98d665033?auto=format&fit=crop&w=800&q=80',
-  },
-];
+
+const TEMARIOS_PRESET = {
+  barberia: [
+    {
+      label: 'Clases Desde Cero',
+      temas: [
+        'Historia de la barbería',
+        'Conocimiento de materiales de la barbería y productos',
+        'Conocimiento de cortes y peinados',
+        'Conocimiento de peinetas y palanqueo',
+        'Manejo de navaja y práctica de alumno',
+        'Fundamento de tijera y práctica de alumno',
+        'Dominio de velocidad de máquina cliper',
+        'Teoría y demostración de corte clásico tradicional en pizarra',
+        'Práctica escrita de corte tradicional',
+        'Demostración de corte tradicional por el profesor en modelo real',
+        'Práctica de alumno con ayuda del docente',
+        'Práctica de alumno sin ayuda',
+        'Teoría y demostración de corte clásico escolar en pizarra',
+        'Práctica escrita de corte clásico escolar',
+        'Demostración de corte clásico escolar por el profesor en modelo real',
+        'Práctica de alumno con ayuda del docente',
+        'Práctica de alumno sin ayuda',
+        'Retroalimentación de corte escolar',
+        'Práctica con ayuda del docente',
+        'Práctica del alumno sin ayuda',
+        'Exámen escrito',
+        'Exámen práctico de corte escolar'
+      ]
+    },
+    {
+      label: 'Curso Intermedio',
+      temas: [
+        'Teoría y demostración de corte Fade en pizarra (Low, mid, high)',
+        'Teoría y demostración de corte Low Fade por el profesor en modelo real',
+        'Práctica de alumno con ayuda del docente',
+        'Retroalimentación de Low Fade',
+        'Práctica de alumno con ayuda del docente',
+        'Práctica del alumno sin ayuda',
+        'Teoría y demostración de corte Mid Fade por el profesor en modelo real',
+        'Práctica de alumno con ayuda del docente',
+        'Retroalimentación de Mid Fade',
+        'Práctica de alumno con ayuda del docente',
+        'Práctica del alumno sin ayuda',
+        'Teoría y demostración de corte Clásico Moderno por el profesor en modelo real',
+        'Práctica de alumno con ayuda del docente',
+        'Retroalimentación de Clásico Moderno',
+        'Práctica de alumno con ayuda del docente',
+        'Práctica del alumno sin ayuda',
+        'Exámen escrito',
+        'Exámen práctico de Fade (Low, Mid)',
+        'Teoría y demostración de mantenimiento de máquina Cliper, Trimmer y Shaver',
+        'Práctica del alumno con ayuda del docente',
+        'Práctica del alumno sin ayuda',
+        'Teoría y demostración de calibración de cuchilla',
+        'Práctica del alumno sin ayuda'
+      ]
+    },
+    {
+      label: 'Curso Avanzado',
+      temas: [
+        'Teoría y demostración de corte Mohicano o Burst Fade por el profesor en modelo real',
+        'Práctica de alumno con ayuda del docente',
+        'Retroalimentación de Mohicano o Burst Fade',
+        'Práctica de alumno con ayuda del docente',
+        'Práctica del alumno sin ayuda',
+        'Teoría y demostración de corte Taper o Blow out por el profesor en modelo real',
+        'Práctica de alumno con ayuda del docente',
+        'Retroalimentación de Taper o Blow out',
+        'Práctica de alumno con ayuda del docente',
+        'Práctica del alumno sin ayuda',
+        'Teoría y demostración de diseño en pizarra',
+        'Práctica del alumno en hoja - Exámen',
+        'Demostración de diseño por el profesor en modelo real',
+        'Práctica de alumno con ayuda del docente',
+        'Práctica del alumno sin ayuda',
+        'Graduación'
+      ]
+    },
+    {
+      label: 'Colorimetría',
+      temas: [
+        'Teoría y demostración de los factores de colorimetría',
+        'Conocimiento de los materiales de la colorimetría',
+        'Formulas para realizar una decoloración perfecta',
+        'Teoría y demostración de mechones en colores fantasía',
+        'Teoría y demostración de rayitos y iluminación',
+        'Práctica de alumno con ayuda del docente',
+        'Práctica de alumno sin ayuda',
+        'Teoría y demostración de decoloración completa',
+        'Práctica de alumno con ayuda del docente',
+        'Práctica de alumno sin ayuda',
+        'Entrega de trabajo final en color platinado',
+        'Graduación'
+      ]
+    }
+  ],
+  tatuaje: [
+    {
+      label: 'Curso de Tatuaje',
+      temas: [
+        'Historia del Tatuaje',
+        'Conocimiento de materiales',
+        'Armado de mesa',
+        'Conocimiento de máquina de bobina y rotativa',
+        'Conocimiento de Agujas, Cartucho y Varilla',
+        'Conocimiento de estilos de tatuajes y tendencias',
+        'Conocimientos de tipos de pieles',
+        'Conocimiento de páginas Tipográficas',
+        'Dinámica de dibujo con lápiz',
+        'Práctica de alumno con ayuda del docente',
+        'Práctica de calcado con ayuda del docente',
+        'Práctica de calcado sin ayuda',
+        'Dominio de pulso en piel sintética',
+        'Práctica de dominio de pulso en piel sintética con ayuda del docente',
+        'Práctica de dominio de pulso en piel sintética sin ayuda',
+        'Práctica de tatuaje minimalista en fruta con ayuda del docente',
+        'Práctica de tatuaje minimalista en fruta sin ayuda',
+        'Demostración de tatuaje minimalista en piel real por el docente',
+        'Práctica de tatuaje minimalista en piel real con ayuda del docente',
+        'Práctica de tatuaje minimalista en piel real sin ayuda',
+        'Demostración de tatuaje Acuarelado por el docente',
+        'Práctica de tatuaje Acuarelado en piel real con ayuda del docente',
+        'Práctica de tatuaje Acuarelado en piel real sin ayuda',
+        'Presentación de trabajo final usando las técnicas aplicadas dentro del curso - Graduación'
+      ]
+    }
+  ],
+  manicure: [
+    {
+      label: 'Curso de Manicure y Pedicure',
+      temas: [
+        'Reconocimiento de materiales / Anatomía de las uñas',
+        'Limpieza tradicional en seco / Esmaltado tradicional',
+        'Tipos de francesa tradicional / Diseños tradicionales',
+        'Práctica con modelo de esmaltado tradicional',
+        'Pedicura tradicional en seco con modelos',
+        'Manicura rusa (manejo de drill) / Esmaltado en gel / Diseños',
+        'Práctica con modelo de esmaltado en gel + uña decorativa',
+        'Efectos + diseños',
+        'Práctica con modelos esmaltado (efectos y diseños)',
+        'Pedicure en gel',
+        'Aplicación de softgel y las 4 puntas comerciales',
+        'Práctica de softgel',
+        'Perfeccionamiento de la técnica softgel',
+        'Práctica en modelo diseño libre',
+        'Práctica en modelo utilizando efectos y relieves (softgel)',
+        'Mano alzada + pedrería y flores 3D',
+        'Práctica con modelo',
+        'Pedicure + flores 3D',
+        'Práctica con modelo de pedi-spa',
+        'Práctica con modelo diseño libre',
+        'Control y manejo de las perlas de acrílico',
+        'Aplicación de acrílico sobre tips',
+        'Las 4 puntas más comercial / técnica de limado',
+        'Práctica con modelo de acrílico',
+        'Las 4 babys comerciales (B. boomer / B. glam / B. glitter / B. color)',
+        'Práctica con modelo acrílico',
+        'Técnica reversa',
+        'Práctica con modelo técnica reversa',
+        'Práctica con modelo diseño libre',
+        'Acripie / Jellyspa',
+        'Práctica con modelo de acripie',
+        'Flores 3D en acrílico',
+        'Práctica con modelo',
+        'Técnica mosaico',
+        'Perfeccionamiento de estructuras',
+        'Práctica en modelo acrílico solo diseños 3D',
+        'Práctica para el concurso de la academia',
+        'Práctica en modelos',
+        'Concurso academia',
+        'Técnicas mixtas y de salón',
+        'Práctica en modelo diseño libre + control de aplicación',
+        'Perfeccionamiento de las técnicas aprendidas',
+        'Presentación y exposición de sus maquetas',
+        'Graduación'
+      ]
+    }
+  ]
+};
 
 export function CursoFormModal({
   isOpen,
@@ -91,6 +246,7 @@ export function CursoFormModal({
   // Lista interactiva de materias / módulos del temario
   const [temario, setTemario] = useState<string[]>([]);
   const [nuevoTema, setNuevoTema] = useState('');
+  const [presetCategory, setPresetCategory] = useState<'barberia' | 'tatuaje' | 'manicure' | null>(null);
 
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -238,11 +394,7 @@ export function CursoFormModal({
     setNuevoTema('');
   };
 
-  const handleAddSugerido = (tema: string) => {
-    if (!temario.includes(tema)) {
-      setTemario([...temario, tema]);
-    }
-  };
+
 
   const handleRemoveTema = (index: number) => {
     setTemario(temario.filter((_, i) => i !== index));
@@ -701,23 +853,64 @@ export function CursoFormModal({
               </button>
             </div>
 
-            {/* Sugerencias Rápidas de Barbería */}
-            <div>
-              <span className="text-[10px] font-semibold text-zinc-500 block mb-1.5">
-                Sugerencias de materias frecuentes (clic para añadir):
+            {/* Plantillas de Temarios (Presets) */}
+            <div className="pt-2 border-t border-zinc-200">
+              <span className="text-[10px] font-semibold text-zinc-500 block mb-2">
+                Plantillas rápidas de temarios:
               </span>
-              <div className="flex flex-wrap gap-1.5">
-                {TEMAS_SUGERIDOS.filter((s) => !temario.includes(s)).slice(0, 5).map((sug, i) => (
-                  <button
-                    key={i}
-                    type="button"
-                    onClick={() => handleAddSugerido(sug)}
-                    className="px-2.5 py-1 rounded-lg bg-white border border-zinc-300 text-zinc-700 hover:border-black hover:text-black text-[10px] font-medium transition-colors cursor-pointer"
-                  >
-                    + {sug}
-                  </button>
-                ))}
+              
+              <div className="flex flex-wrap gap-2 mb-2">
+                <button
+                  type="button"
+                  onClick={() => setPresetCategory(presetCategory === 'barberia' ? null : 'barberia')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer border ${
+                    presetCategory === 'barberia'
+                      ? 'bg-black text-white border-black'
+                      : 'bg-white text-zinc-700 border-zinc-300 hover:border-black'
+                  }`}
+                >
+                  ✂️ Barbería
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPresetCategory(presetCategory === 'tatuaje' ? null : 'tatuaje')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer border ${
+                    presetCategory === 'tatuaje'
+                      ? 'bg-black text-white border-black'
+                      : 'bg-white text-zinc-700 border-zinc-300 hover:border-black'
+                  }`}
+                >
+                  🖋️ Tatuaje
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPresetCategory(presetCategory === 'manicure' ? null : 'manicure')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer border ${
+                    presetCategory === 'manicure'
+                      ? 'bg-black text-white border-black'
+                      : 'bg-white text-zinc-700 border-zinc-300 hover:border-black'
+                  }`}
+                >
+                  💅 Manicure
+                </button>
               </div>
+
+              {presetCategory && (
+                <div className="flex flex-wrap gap-1.5 p-2 bg-zinc-100 rounded-xl border border-zinc-200">
+                  {TEMARIOS_PRESET[presetCategory].map((preset, i) => (
+                    <button
+                      key={i}
+                      type="button"
+                      onClick={() => setTemario(preset.temas)}
+                      className="px-2.5 py-1 rounded-lg bg-white border border-zinc-300 text-zinc-700 hover:border-black hover:text-black text-[10px] font-medium transition-colors cursor-pointer flex items-center gap-1"
+                      title={`Cargar ${preset.temas.length} temas (Reemplazará la lista actual)`}
+                    >
+                      <Plus className="w-3 h-3" />
+                      {preset.label}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* Lista actual de materias añadidas */}
@@ -836,27 +1029,7 @@ export function CursoFormModal({
               </div>
             )}
 
-            {/* Presets rápidos de muestra */}
-            <div className="pt-1 flex flex-wrap items-center gap-1.5">
-              <span className="text-[10px] text-zinc-400 font-medium">O usar foto de muestra:</span>
-              {IMAGENES_PRESET.map((p, i) => (
-                <button
-                  key={i}
-                  type="button"
-                  onClick={() => {
-                    setImagenUrl(p.url);
-                    setImagenPesoKb(null);
-                  }}
-                  className={`px-2 py-0.5 rounded-md text-[10px] font-medium border cursor-pointer transition-colors ${
-                    imagenUrl === p.url
-                      ? 'bg-black text-white border-black'
-                      : 'bg-white text-zinc-700 border-zinc-200 hover:border-zinc-300'
-                  }`}
-                >
-                  {p.label}
-                </button>
-              ))}
-            </div>
+
 
             {/* Input URL secundario si el usuario lo activa */}
             {showUrlInput && (

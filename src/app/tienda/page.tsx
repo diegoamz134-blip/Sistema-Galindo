@@ -200,34 +200,46 @@ export default function TiendaPage() {
     };
   }, [busqueda, categorias, sedeSeleccionada]);
 
-  // 1. Cargar lista de categorías con su conteo oficial
+  // 1. Cargar lista de categorías con su conteo oficial dinámico por sede
   useEffect(() => {
     async function loadCategorias() {
       try {
-        const { data, error } = await supabase
-          .from('categorias')
-          .select('id, nombre, slug, orden, activo, productos(count)')
-          .eq('activo', true)
-          .order('orden', { ascending: true });
+        const stockField = sedeSeleccionada === 'ica' ? 'stock_ica' : 'stock_huancayo';
 
-        if (error) {
-          console.error('Error al cargar categorías:', error.message || error);
-          return;
-        }
+        const [catsRes, prodsRes] = await Promise.all([
+          supabase
+            .from('categorias')
+            .select('id, nombre, slug, orden, activo')
+            .eq('activo', true)
+            .order('orden', { ascending: true }),
+          supabase
+            .from('productos')
+            .select('categoria_id')
+            .eq('activo', true)
+            .gt(stockField, 0)
+        ]);
 
+        if (catsRes.error) throw catsRes.error;
+        if (prodsRes.error) throw prodsRes.error;
+
+        const conteos: Record<string, number> = {};
         let sumaTotal = 0;
-        const mappedCats: CategoriaConConteo[] = (data || []).map((cat: any) => {
-          const count = Array.isArray(cat.productos) && cat.productos[0]?.count
-            ? Number(cat.productos[0].count)
-            : 0;
-          sumaTotal += count;
+        
+        (prodsRes.data || []).forEach(p => {
+          if (p.categoria_id) {
+            conteos[p.categoria_id] = (conteos[p.categoria_id] || 0) + 1;
+            sumaTotal++;
+          }
+        });
+
+        const mappedCats: CategoriaConConteo[] = (catsRes.data || []).map((cat: any) => {
           return {
             id: cat.id,
             nombre: cat.nombre,
             slug: cat.slug,
             orden: cat.orden,
             activo: cat.activo,
-            conteoProductos: count,
+            conteoProductos: conteos[cat.id] || 0,
           };
         });
 
@@ -239,7 +251,7 @@ export default function TiendaPage() {
     }
 
     loadCategorias();
-  }, []);
+  }, [sedeSeleccionada]);
 
   // 2. Función para pedir productos por lotes (Buscador inteligente y Paginación bajo demanda)
   const fetchProductsBatch = async (
@@ -1018,11 +1030,6 @@ export default function TiendaPage() {
                         </>
                       )}
                     </button>
-                  ) : totalProductos > 0 ? (
-                    <div className="flex items-center gap-1.5 text-xs text-zinc-400 font-mono pt-2">
-                      <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-                      <span>Has visto todo el catálogo disponible ({totalProductos} productos)</span>
-                    </div>
                   ) : null}
                 </div>
               </>

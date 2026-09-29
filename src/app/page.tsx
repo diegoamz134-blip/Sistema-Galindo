@@ -128,9 +128,9 @@ export default function HomePage() {
         {/* Imagen de Fondo del Banner Oficial a Todo Color */}
         <div className="absolute inset-0 z-0 select-none pointer-events-none">
           <img
-            src="/banner.png"
+            src="/baner.png"
             alt="Banner Galindo Barber Fondo"
-            className="w-full h-full object-cover object-center"
+            className="w-full h-full object-contain object-right xl:object-center"
           />
           {/* Degradado lateral sutil: oscuro en la izquierda para legibilidad y 100% transparente a la derecha para ver el arte del banner */}
           <div className="absolute inset-0 bg-gradient-to-r from-black/85 via-black/50 to-transparent" />

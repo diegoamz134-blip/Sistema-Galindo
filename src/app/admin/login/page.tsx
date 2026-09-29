@@ -229,8 +229,8 @@ export default function AdminLoginPage() {
     <div className="min-h-screen relative overflow-hidden bg-zinc-950 text-white flex flex-col justify-between selection:bg-white selection:text-black">
       {/* Fondo Panorámico de Alta Calidad (Banner oficial completo sin cortes) */}
       <div
-        className="absolute inset-0 bg-cover bg-center opacity-30 mix-blend-luminosity scale-100 pointer-events-none"
-        style={{ backgroundImage: "url('/banner.png')" }}
+        className="absolute inset-0 bg-contain bg-no-repeat bg-center opacity-30 mix-blend-luminosity scale-100 pointer-events-none"
+        style={{ backgroundImage: "url('/baner.png')" }}
       />
 
       {/* Viñeta cinematográfica para enfocar la vista en el centro */}
