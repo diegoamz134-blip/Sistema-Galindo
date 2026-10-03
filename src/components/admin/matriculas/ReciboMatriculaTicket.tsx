@@ -1,10 +1,11 @@
 'use client';
 
-import React from 'react';
-import { X, Printer, CheckCircle, MessageCircle, Calendar } from 'lucide-react';
+import React, { useState } from 'react';
+import { X, Printer, CheckCircle, MessageCircle, Calendar, Download } from 'lucide-react';
 import { MatriculaConDetalle } from '@/lib/academia-service';
 import { formatCurrency, formatDate } from '@/lib/utils';
 import { BUSINESS_INFO } from '@/lib/constants';
+import { exportarTicketPDF } from '@/lib/ticket-pdf';
 
 interface ReciboMatriculaTicketProps {
   isOpen: boolean;
@@ -17,10 +18,21 @@ export function ReciboMatriculaTicket({
   onClose,
   matricula,
 }: ReciboMatriculaTicketProps) {
+  const [descargandoPdf, setDescargandoPdf] = useState(false);
+
   if (!isOpen) return null;
 
   const handlePrint = () => {
     window.print();
+  };
+
+  const handleDescargarPDF = async () => {
+    setDescargandoPdf(true);
+    try {
+      await exportarTicketPDF('voucher-matricula', matricula.codigo_matricula);
+    } finally {
+      setDescargandoPdf(false);
+    }
   };
 
   const pagadoMatricula = Number(matricula.monto_matricula_pagado) || 0;
@@ -31,6 +43,44 @@ export function ReciboMatriculaTicket({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm overflow-y-auto">
+      {/* Estilos específicos de impresión directa para este comprobante */}
+      <style>{`
+        @media print {
+          @page {
+            margin: 0;
+            size: 80mm auto;
+          }
+          html, body {
+            height: auto !important;
+            overflow: visible !important;
+            background: #fff !important;
+            padding: 0 !important;
+            margin: 0 !important;
+          }
+          body * {
+            visibility: hidden !important;
+          }
+          #voucher-matricula,
+          #voucher-matricula * {
+            visibility: visible !important;
+          }
+          #voucher-matricula {
+            position: fixed !important;
+            left: 0 !important;
+            top: 0 !important;
+            width: 80mm !important;
+            max-width: 80mm !important;
+            padding: 4mm !important;
+            margin: 0 auto !important;
+            border: none !important;
+            box-shadow: none !important;
+            background: #ffffff !important;
+            color: #000000 !important;
+            z-index: 9999999 !important;
+          }
+        }
+      `}</style>
+
       <div className="relative w-full max-w-sm bg-white border border-zinc-200 rounded-2xl shadow-2xl overflow-hidden my-6">
         
         {/* Barra superior de herramientas */}
@@ -38,19 +88,32 @@ export function ReciboMatriculaTicket({
           <span className="text-xs font-bold text-zinc-700 uppercase tracking-wider">
             Comprobante Oficial de Matrícula
           </span>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={handleDescargarPDF}
+              disabled={descargandoPdf}
+              className="p-1.5 rounded-lg border border-zinc-200 bg-white hover:bg-zinc-100 text-zinc-700 transition-colors flex items-center gap-1 text-[11px] font-semibold px-2.5 shadow-2xs cursor-pointer active:scale-95 disabled:opacity-50"
+              title="Descargar en PDF de alta resolución"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span>{descargandoPdf ? 'PDF...' : 'PDF'}</span>
+            </button>
+
             <button
               type="button"
               onClick={handlePrint}
-              className="p-1.5 rounded-lg bg-black text-white hover:bg-zinc-800 transition-colors flex items-center gap-1 text-[11px] font-semibold px-2.5"
+              className="p-1.5 rounded-lg bg-black text-white hover:bg-zinc-800 transition-colors flex items-center gap-1 text-[11px] font-semibold px-2.5 shadow-2xs cursor-pointer active:scale-95"
+              title="Imprimir ticket térmico"
             >
               <Printer className="w-3.5 h-3.5" />
               <span>Imprimir</span>
             </button>
+
             <button
               type="button"
               onClick={onClose}
-              className="p-1.5 rounded-lg text-zinc-400 hover:text-black hover:bg-zinc-200 transition-colors"
+              className="p-1.5 rounded-lg text-zinc-400 hover:text-black hover:bg-zinc-200 transition-colors cursor-pointer"
             >
               <X className="w-4 h-4" />
             </button>
@@ -68,16 +131,16 @@ export function ReciboMatriculaTicket({
             <h2 className="font-bold text-sm uppercase tracking-wider">
               Galindo Barber Academy
             </h2>
-            <p className="text-[10px] text-zinc-500">
+            <p className="text-[10px] text-zinc-500 font-sans">
               {matricula.sede}
             </p>
-            <p className="text-[10px] text-zinc-500">
+            <p className="text-[10px] text-zinc-500 font-sans">
               WhatsApp Oficial: {BUSINESS_INFO.whatsappDisplay}
             </p>
           </div>
 
           {/* Código y Fechas */}
-          <div className="space-y-1 pb-2 border-b border-dashed border-zinc-200 text-[11px]">
+          <div className="text-[11px] space-y-1 pb-2 border-b border-dashed border-zinc-200">
             <div className="flex justify-between">
               <span className="text-zinc-500">N° MATRÍCULA:</span>
               <span className="font-bold">{matricula.codigo_matricula}</span>
@@ -93,7 +156,7 @@ export function ReciboMatriculaTicket({
           </div>
 
           {/* Datos del Alumno */}
-          <div className="space-y-1 pb-2 border-b border-dashed border-zinc-200 text-[11px]">
+          <div className="text-[11px] space-y-1 pb-2 border-b border-dashed border-zinc-200">
             <div className="text-zinc-500 uppercase text-[10px] font-bold">Datos del Estudiante</div>
             <div className="font-bold text-xs">
               {matricula.alumno.nombres} {matricula.alumno.apellidos}
@@ -105,7 +168,7 @@ export function ReciboMatriculaTicket({
           </div>
 
           {/* Datos Académicos */}
-          <div className="space-y-1 pb-2 border-b border-dashed border-zinc-200 text-[11px]">
+          <div className="text-[11px] space-y-1 pb-2 border-b border-dashed border-zinc-200">
             <div className="text-zinc-500 uppercase text-[10px] font-bold">Detalle Académico</div>
             <div className="font-semibold">
               {matricula.curso_nombre || matricula.curso?.titulo}
@@ -117,7 +180,7 @@ export function ReciboMatriculaTicket({
           </div>
 
           {/* Resumen Financiero */}
-          <div className="space-y-1.5 pb-3 border-b border-dashed border-zinc-300 text-[11px]">
+          <div className="text-[11px] space-y-1.5 pb-3 border-b border-dashed border-zinc-300">
             <div className="flex justify-between text-zinc-600">
               <span>Costo Total del Curso:</span>
               <span>{formatCurrency(matricula.total_curso)}</span>
@@ -138,7 +201,7 @@ export function ReciboMatriculaTicket({
 
           {/* Cronograma de Cuotas */}
           {matricula.cuotas && matricula.cuotas.length > 0 && (
-            <div className="space-y-1.5 pb-3 border-b border-dashed border-zinc-300 text-[10px]">
+            <div className="text-[10px] space-y-1.5 pb-3 border-b border-dashed border-zinc-300">
               <div className="text-zinc-500 uppercase font-bold text-[10px]">
                 Cronograma de Cuotas Restantes
               </div>

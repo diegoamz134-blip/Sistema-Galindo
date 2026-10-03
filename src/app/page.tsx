@@ -18,7 +18,7 @@ import { supabase } from '@/lib/supabase';
 import { getCursosActivos } from '@/lib/academia-service';
 import { SedeCentralSection } from '@/components/home/SedeCentralSection';
 import { FeaturedCourseSection } from '@/components/home/FeaturedCourseSection';
-import { FloatingWhatsAppButton } from '@/components/common/FloatingWhatsAppButton';
+import { GoogleBusinessBadge } from '@/components/home/GoogleBusinessBadge';
 
 
 export default function HomePage() {
@@ -125,12 +125,14 @@ export default function HomePage() {
 
       {/* 1. HERO SECTION NATURAL CON BANNER DE FONDO */}
       <section className="relative pt-16 pb-20 md:pt-24 md:pb-28 border-b border-zinc-200 overflow-hidden bg-zinc-950">
-        {/* Imagen de Fondo del Banner Oficial a Todo Color */}
+        {/* Imagen de Fondo del Banner Oficial a Todo Color Comprimida a WebP */}
         <div className="absolute inset-0 z-0 select-none pointer-events-none">
           <img
-            src="/baner.png"
-            alt="Banner Galindo Barber Fondo"
+            src="/baner.webp"
+            alt="Galindo Barber Academy & Supply - Cursos de barbería profesional y tienda de herramientas de corte en Ica y Huancayo"
             className="w-full h-full object-contain object-right xl:object-center"
+            loading="eager"
+            fetchPriority="high"
           />
           {/* Degradado lateral sutil: oscuro en la izquierda para legibilidad y 100% transparente a la derecha para ver el arte del banner */}
           <div className="absolute inset-0 bg-gradient-to-r from-black/85 via-black/50 to-transparent" />
@@ -151,11 +153,6 @@ export default function HomePage() {
                 <span>Academia Profesional</span>
                 <span className="text-zinc-400">•</span>
                 <span>Herramientas 100% Originales</span>
-                <span className="text-zinc-400">•</span>
-                <span className="text-white bg-white/10 px-2 py-0.5 rounded-md border border-white/20 inline-flex items-center gap-1">
-                  <MapPin className="w-3 h-3 text-cyan-400" />
-                  <span>{sedeActual.nombre} ({sedeActual.ciudad})</span>
-                </span>
               </div>
 
               <h1 className="text-4xl sm:text-6xl font-black tracking-tight text-white uppercase leading-[1.08] drop-shadow-md">
@@ -166,33 +163,21 @@ export default function HomePage() {
                 Formación técnica profesional y práctica real en {sedeActual.ciudad}. Cursos de fade, tijera y visagismo capilar, con tienda de máquinas originales Wahl, BaBylissPRO y kits para estudiantes.
               </p>
 
-              {/* Selector Rápido de Sede en Hero */}
-              <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-black/60 border border-white/20 backdrop-blur-md text-xs">
-                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                <span className="text-zinc-300">
-                  Estás viendo: <b className="text-white font-bold">{sedeActual.nombre}</b>
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setSedeSeleccionada(otraSedeKey)}
-                  className="ml-2 text-cyan-300 hover:text-white underline font-mono text-[11px] cursor-pointer"
-                >
-                  Cambiar a Sede {otraSede.ciudad} →
-                </button>
-              </div>
-
-              <div className="flex flex-wrap items-center gap-3 pt-1">
+              {/* Una sola llamada a la acción principal destacada + enlace secundario sutil */}
+              <div className="flex flex-col sm:flex-row sm:items-center gap-3.5 pt-2">
                 <Link
                   href="/cursos"
-                  className="px-6 py-3.5 rounded-xl text-xs font-bold uppercase tracking-wider bg-white text-black hover:bg-zinc-200 transition-all shadow-lg active:scale-95"
+                  className="inline-flex items-center justify-center gap-2 px-8 py-4 rounded-xl text-xs sm:text-sm font-black uppercase tracking-wider bg-white text-black hover:bg-zinc-100 transition-all shadow-[0_10px_25px_rgba(255,255,255,0.2)] hover:shadow-[0_12px_30px_rgba(255,255,255,0.3)] active:scale-95 group text-center"
                 >
-                  Ver Cursos & Matrículas
+                  <span>Explorar Cursos & Matrículas</span>
+                  <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
                 </Link>
                 <Link
                   href="/tienda"
-                  className="px-6 py-3.5 rounded-xl text-xs font-bold uppercase tracking-wider bg-black/60 hover:bg-black/80 text-white border border-white/30 backdrop-blur-xs transition-all shadow-lg active:scale-95"
+                  className="inline-flex items-center justify-center gap-1.5 px-4 py-3 rounded-xl text-xs font-bold text-zinc-300 hover:text-white hover:bg-white/10 transition-colors text-center"
                 >
-                  Catálogo de Productos
+                  <ShoppingBag className="w-3.5 h-3.5" />
+                  <span>Ver Tienda de Herramientas →</span>
                 </Link>
               </div>
 
@@ -201,6 +186,9 @@ export default function HomePage() {
           </div>
         </div>
       </section>
+
+      {/* 2. FICHA DE GOOGLE VERIFICADA & REPUTACIÓN */}
+      <GoogleBusinessBadge />
 
 
 
@@ -333,9 +321,6 @@ export default function HomePage() {
         onClose={() => setQuickViewProducto(null)}
         onAddToCart={handleAddToCart}
       />
-
-      {/* Botón Flotante Animado de WhatsApp */}
-      <FloatingWhatsAppButton />
 
       <Footer />
     </div>

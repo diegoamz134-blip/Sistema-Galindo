@@ -138,13 +138,10 @@ export async function getCursosActivos(sedeId?: string): Promise<Curso[]> {
     if (!error && data && data.length > 0) {
       const allCursos = (data as any[]).map(normalizarCurso);
       if (sedeId) {
-        const filtered = allCursos.filter((c) => {
+        return allCursos.filter((c) => {
           const s = (c.sede || 'ica').toLowerCase();
           return s === sedeId.toLowerCase() || s === 'ambas' || s === 'todas';
         });
-        if (filtered.length > 0) {
-          return filtered;
-        }
       } else {
         return allCursos;
       }
@@ -275,6 +272,25 @@ export async function getMatriculasConDetalle(
 }
 
 // -------------------------------------------------------------------------
+// 2.5 Comparador flexible de sedes (Ica vs Huancayo)
+// -------------------------------------------------------------------------
+export function matchSede(sedeMatricula?: string | null, sedeTarget?: string | null): boolean {
+  if (!sedeTarget || sedeTarget === 'TODAS' || sedeTarget === 'todas') return true;
+  if (!sedeMatricula) return false;
+
+  const target = sedeTarget.toLowerCase().trim();
+  const current = sedeMatricula.toLowerCase().trim();
+
+  if (target.includes('ica')) {
+    return current.includes('ica');
+  }
+  if (target.includes('huancayo')) {
+    return current.includes('huancayo');
+  }
+  return current === target;
+}
+
+// -------------------------------------------------------------------------
 // 3. Aplicar filtros en memoria
 // -------------------------------------------------------------------------
 function aplicarFiltrosEnMemoria(
@@ -284,6 +300,11 @@ function aplicarFiltrosEnMemoria(
   if (!filtros) return lista;
 
   return lista.filter((m) => {
+    // Filtro por sede
+    if (filtros.sede && filtros.sede !== 'TODAS') {
+      if (!matchSede(m.sede, filtros.sede)) return false;
+    }
+
     // Filtro por búsqueda de texto
     if (filtros.busqueda) {
       const term = filtros.busqueda.toLowerCase().trim();
@@ -448,7 +469,7 @@ export async function crearMatriculaCompleta(
     const codigoMatriculaGenerado = `MAT-2026-${randomSuffix}`;
 
     // C. Calcular saldo y registrar o actualizar Matrícula
-    const saldoInicial = Math.max(0, input.total_curso - input.monto_matricula_pagado);
+    const saldoInicial = Math.max(0, input.total_curso);
 
     // Buscar si ya existía una matrícula provisional para este alumno
     const { data: matExistente } = await supabase
@@ -699,6 +720,27 @@ export async function actualizarEstadoAcademico(
 }
 
 // -------------------------------------------------------------------------
+// 8.5 Actualizar sede física de la matrícula
+// -------------------------------------------------------------------------
+export async function actualizarSedeMatricula(
+  matriculaId: string,
+  nuevaSede: string
+): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const { error } = await supabase
+      .from('matriculas')
+      .update({ sede: nuevaSede })
+      .eq('id', matriculaId);
+
+    if (error) throw new Error(error.message);
+    return { ok: true };
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : 'Error al cambiar sede de matrícula';
+    return { ok: false, error: msg };
+  }
+}
+
+// -------------------------------------------------------------------------
 // Helper: Registrar ingreso en caja chica si hay una abierta
 // -------------------------------------------------------------------------
 async function registrarIngresoEnCaja(params: {
@@ -773,6 +815,7 @@ export interface CursoInput {
   activo?: boolean;
   destacado?: boolean;
   turnos?: TurnoOption[];
+  sede?: string;
 }
 
 /**
@@ -835,6 +878,7 @@ export async function guardarCurso(
       activo: curso.activo !== undefined ? curso.activo : true,
       destacado: Boolean(curso.destacado),
       beneficios: turnosAGuardar,
+      sede: curso.sede || 'ica',
     };
 
     const payloadWithTurnos = {

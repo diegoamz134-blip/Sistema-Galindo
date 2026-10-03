@@ -26,6 +26,7 @@ export interface AdminProductsPaginadoParams {
   porPagina?: number;
   busqueda?: string;
   categoriaId?: string;
+  sedeId?: 'ica' | 'huancayo';
 }
 
 export interface AdminProductsPaginadoRespuesta {
@@ -47,6 +48,14 @@ export async function getAdminProductsPaginado(
     let query = supabase
       .from('productos')
       .select('*, categoria:categorias(*)', { count: 'exact' });
+
+    // Filtrar por sede: solo mostrar productos con stock > 0 en la sede activa
+    if (params?.sedeId === 'huancayo') {
+      query = query.gt('stock_huancayo', 0);
+    } else if (params?.sedeId === 'ica') {
+      // Para Ica: stock_ica > 0, o stock_ica es null pero stock > 0 (compatibilidad con datos legacy)
+      query = query.or('stock_ica.gt.0,and(stock_ica.is.null,stock.gt.0)');
+    }
 
     if (params?.categoriaId && params.categoriaId !== 'todas') {
       query = query.eq('categoria_id', params.categoriaId);
@@ -315,3 +324,25 @@ export async function deleteProduct(productId: string): Promise<{ success: boole
   }
 }
 
+// -------------------------------------------------------------------------
+// 6. Activar / Desactivar producto (ocultar de la tienda sin eliminar)
+// -------------------------------------------------------------------------
+export async function toggleProductoActivo(
+  productId: string,
+  activo: boolean
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { error } = await supabase
+      .from('productos')
+      .update({ activo })
+      .eq('id', productId);
+
+    if (error) {
+      return { success: false, error: error.message };
+    }
+    return { success: true };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Error al cambiar estado del producto';
+    return { success: false, error: msg };
+  }
+}

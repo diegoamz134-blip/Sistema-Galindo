@@ -143,23 +143,21 @@ export async function procesarPedidoWeb(
       if (!esCurso && !item.producto.id.startsWith('mock-')) {
         try {
           const esHuancayo = input.sedeId === 'huancayo';
-          const stockPrev = esHuancayo 
-            ? (item.producto.stock_huancayo ?? 0) 
-            : (item.producto.stock_ica ?? item.producto.stock ?? 0);
-          const nuevoStock = Math.max(0, stockPrev - item.cantidad);
+          const sedeStr = esHuancayo ? 'huancayo' : 'ica';
+          
+          // Llamada RPC a la base de datos para decrementar de forma segura (Atómica)
+          const { data: rpcData, error: rpcError } = await supabase.rpc('decrementar_stock_seguro', {
+            p_producto_id: item.producto.id,
+            p_cantidad: item.cantidad,
+            p_sede: sedeStr
+          });
 
-          // Actualizar stock de la sede correspondiente
-          if (esHuancayo) {
-            await supabase
-              .from('productos')
-              .update({ stock_huancayo: nuevoStock })
-              .eq('id', item.producto.id);
-          } else {
-            await supabase
-              .from('productos')
-              .update({ stock_ica: nuevoStock })
-              .eq('id', item.producto.id);
+          if (rpcError) {
+            throw new Error(rpcError.message);
           }
+
+          const stockPrev = rpcData?.stock_anterior ?? 0;
+          const nuevoStock = rpcData?.stock_nuevo ?? 0;
 
           // Registrar en Kardex (movimientos_inventario) con sede específica
           await supabase.from('movimientos_inventario').insert({
@@ -168,14 +166,15 @@ export async function procesarPedidoWeb(
             cantidad: item.cantidad,
             stock_anterior: stockPrev,
             stock_nuevo: nuevoStock,
-            sede: esHuancayo ? 'huancayo' : 'ica',
+            sede: sedeStr,
             motivo: `Pedido Web Recojo #${input.codigoPedido} (${sedeActual.nombre}) - Cliente: ${input.clienteNombre}`,
             usuario_id: '00000000-0000-0000-0000-000000000001',
             usuario_nombre: 'Tienda Online Galindo',
             referencia_id: input.codigoPedido,
           });
-        } catch (stockErr) {
+        } catch (stockErr: any) {
           console.warn(`Error al actualizar stock de producto ${item.producto.id}:`, stockErr);
+          throw new Error(`Ocurrió un problema de stock con el producto ${item.producto.nombre}: ${stockErr.message}`);
         }
       }
     }

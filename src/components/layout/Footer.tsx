@@ -92,17 +92,22 @@ export function Footer() {
             </h4>
             <ul className="space-y-2.5 text-xs">
               <li>
-                <Link href="/terminos" className="text-zinc-400 hover:text-white transition-colors">
+                <Link href="/aviso-legal" className="text-zinc-300 hover:text-white transition-colors">
+                  Aviso Legal
+                </Link>
+              </li>
+              <li>
+                <Link href="/terminos" className="text-zinc-300 hover:text-white transition-colors">
                   Términos y Condiciones
                 </Link>
               </li>
               <li>
-                <Link href="/privacidad" className="text-zinc-400 hover:text-white transition-colors">
+                <Link href="/privacidad" className="text-zinc-300 hover:text-white transition-colors">
                   Política de Privacidad
                 </Link>
               </li>
               <li>
-                <Link href="/cookies" className="text-zinc-400 hover:text-white transition-colors">
+                <Link href="/cookies" className="text-zinc-300 hover:text-white transition-colors">
                   Política de Cookies
                 </Link>
               </li>

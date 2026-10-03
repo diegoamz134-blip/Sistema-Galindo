@@ -11,12 +11,14 @@ interface NuevaMatriculaModalProps {
   isOpen: boolean;
   onClose: () => void;
   onMatriculaCreada: (nueva: MatriculaConDetalle) => void;
+  sedeInicial?: string;
 }
 
 export function NuevaMatriculaModal({
   isOpen,
   onClose,
   onMatriculaCreada,
+  sedeInicial = 'Sede Central Ica',
 }: NuevaMatriculaModalProps) {
   const [cursos, setCursos] = useState<Curso[]>([]);
   const [cargandoCursos, setCargandoCursos] = useState(true);
@@ -29,14 +31,14 @@ export function NuevaMatriculaModal({
   const [apellidos, setApellidos] = useState('');
   const [celular, setCelular] = useState('');
   const [email, setEmail] = useState('');
-  const [distrito, setDistrito] = useState('Ica Centro');
+  const [distrito, setDistrito] = useState(sedeInicial.toLowerCase().includes('huancayo') ? 'Huancayo' : 'Ica Centro');
   const [direccion, setDireccion] = useState('');
   const [contactoEmergenciaNombre, setContactoEmergenciaNombre] = useState('');
   const [contactoEmergenciaTelefono, setContactoEmergenciaTelefono] = useState('');
 
   // Académico
   const [cursoSeleccionadoId, setCursoSeleccionadoId] = useState<string>('');
-  const [sede, setSede] = useState<string>('Sede Central Ica');
+  const [sede, setSede] = useState<string>(sedeInicial);
   const [turno, setTurno] = useState<'MANANA' | 'TARDE' | 'NOCHE' | 'SABATINO'>('MANANA');
   const [fechaInicio, setFechaInicio] = useState<string>(
     new Date().toISOString().split('T')[0]
@@ -54,9 +56,12 @@ export function NuevaMatriculaModal({
 
   useEffect(() => {
     if (!isOpen) return;
+    setSede(sedeInicial);
+    setDistrito(sedeInicial.toLowerCase().includes('huancayo') ? 'Huancayo' : 'Ica Centro');
     async function load() {
       setCargandoCursos(true);
-      const list = await getCursosActivos();
+      const sedeCod = sedeInicial.toLowerCase().includes('huancayo') ? 'huancayo' : 'ica';
+      const list = await getCursosActivos(sedeCod);
       setCursos(list);
       if (list.length > 0) {
         const prim = list[0];
@@ -67,7 +72,7 @@ export function NuevaMatriculaModal({
       setCargandoCursos(false);
     }
     load();
-  }, [isOpen]);
+  }, [isOpen, sedeInicial]);
 
   // Al cambiar curso, ajustar montos sugeridos
   const handleCursoChange = (cId: string) => {

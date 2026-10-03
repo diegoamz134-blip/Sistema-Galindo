@@ -19,6 +19,7 @@ import { useAuth } from '@/context/AuthContext';
 import { Producto, MetodoPago } from '@/types/database';
 import { getPOSProducts, procesarVentaPOS, VentaItemPOS, VentaPOSData } from '@/lib/pos-service';
 import { useSede } from '@/context/SedeContext';
+import { supabase } from '@/lib/supabase';
 import { generateCode } from '@/lib/utils';
 import { POSProductCatalog } from '@/components/admin/pos/POSProductCatalog';
 import { POSCartTicket } from '@/components/admin/pos/POSCartTicket';
@@ -87,6 +88,17 @@ export default function POSPage() {
 
   useEffect(() => {
     cargarProductos();
+  }, [cargarProductos]);
+
+  // Realtime: actualiza el catálogo cuando cambia el stock en la BD
+  useEffect(() => {
+    const channel = supabase
+      .channel('pos-productos-realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'productos' }, () => {
+        cargarProductos();
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
   }, [cargarProductos]);
 
   // Limpiar el carrito si se cambia de sede desde el panel global

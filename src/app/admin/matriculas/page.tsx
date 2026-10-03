@@ -27,6 +27,7 @@ import {
   eliminarTodosLosCursos,
   calcularEstadisticas,
   toggleEntregaKit,
+  matchSede,
   MatriculaConDetalle,
   FiltrosMatriculas,
   EstadisticasAcademia,
@@ -41,8 +42,10 @@ import { RegistrarPagoCuotaModal } from '@/components/admin/matriculas/Registrar
 import { ReciboMatriculaTicket } from '@/components/admin/matriculas/ReciboMatriculaTicket';
 import { AdminCursosList } from '@/components/admin/matriculas/AdminCursosList';
 import { CursoFormModal } from '@/components/admin/matriculas/CursoFormModal';
+import { useSede } from '@/context/SedeContext';
 
 export default function AdminMatriculasPage() {
+  const { sedeActiva, sedeInfo } = useSede();
   const [tabActiva, setTabActiva] = useState<'matriculas' | 'cursos'>('matriculas');
   const [matriculas, setMatriculas] = useState<MatriculaConDetalle[]>([]);
   const [cursos, setCursos] = useState<Curso[]>([]);
@@ -51,10 +54,15 @@ export default function AdminMatriculasPage() {
 
   // Filtros
   const [busqueda, setBusqueda] = useState('');
-  const [filtroSede, setFiltroSede] = useState('TODAS');
+  const [filtroSede, setFiltroSede] = useState<string>('SEDE_ACTIVA');
   const [filtroCurso, setFiltroCurso] = useState('TODOS');
   const [filtroEstadoCuota, setFiltroEstadoCuota] = useState<'TODOS' | 'AL_DIA' | 'VENCIDA' | 'PAGADA'>('TODOS');
   const [filtroKit, setFiltroKit] = useState<'TODOS' | 'ENTREGADO' | 'PENDIENTE'>('TODOS');
+
+  // Sincronizar el filtro de sede cuando el usuario cambia de sede en el selector global
+  useEffect(() => {
+    setFiltroSede('SEDE_ACTIVA');
+  }, [sedeActiva]);
 
   // Modales
   const [showModalNueva, setShowModalNueva] = useState(false);
@@ -123,32 +131,38 @@ export default function AdminMatriculasPage() {
       )
       .subscribe();
 
-    // 2. Heartbeat de sincronización continua (cada 4 segundos cuando la pestaña está visible)
-    const interval = setInterval(() => {
-      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
-        cargarDatos(true);
-      }
-    }, 4000);
-
-    // 3. Sincronización instantánea al recuperar foco en la ventana
+    // 2. Sincronización instantánea al recuperar foco en la ventana
     const onFocus = () => cargarDatos(true);
     window.addEventListener('focus', onFocus);
 
     return () => {
-      clearInterval(interval);
       window.removeEventListener('focus', onFocus);
       supabase.removeChannel(channel);
     };
   }, [cargarDatos]);
 
-  // Cálculo de KPIs
+  // Sede efectiva para la vista
+  const sedeEfectiva = filtroSede === 'SEDE_ACTIVA' ? sedeActiva : filtroSede;
+
+  // Filtrado de cursos por Sede Activa (Global)
+  const cursosFiltrados = useMemo(() => {
+    return cursos.filter((c) => matchSede(c.sede, sedeEfectiva));
+  }, [cursos, sedeEfectiva]);
+
+  // Matrículas pertenecientes a la sede evaluada
+  const matriculasSede = useMemo(() => {
+    if (sedeEfectiva === 'TODAS') return matriculas;
+    return matriculas.filter((m) => matchSede(m.sede, sedeEfectiva));
+  }, [matriculas, sedeEfectiva]);
+
+  // Cálculo de KPIs correspondiente a la sede
   const stats = useMemo(() => {
-    return calcularEstadisticas(matriculas);
-  }, [matriculas]);
+    return calcularEstadisticas(matriculasSede);
+  }, [matriculasSede]);
 
   // Filtrado de lista en tiempo real
   const matriculasFiltradas = useMemo(() => {
-    return matriculas.filter((m) => {
+    return matriculasSede.filter((m) => {
       // Búsqueda por texto
       if (busqueda.trim()) {
         const term = busqueda.toLowerCase().trim();
@@ -164,11 +178,6 @@ export default function AdminMatriculasPage() {
           celular.includes(term);
 
         if (!coincide) return false;
-      }
-
-      // Filtro Sede
-      if (filtroSede !== 'TODAS' && m.sede !== filtroSede) {
-        return false;
       }
 
       // Filtro Curso
@@ -198,7 +207,7 @@ export default function AdminMatriculasPage() {
 
       return true;
     });
-  }, [matriculas, busqueda, filtroSede, filtroCurso, filtroKit, filtroEstadoCuota]);
+  }, [matriculasSede, busqueda, filtroCurso, filtroKit, filtroEstadoCuota]);
 
   // Handler rápido para toggle de kit
   const handleToggleKitRapido = async (m: MatriculaConDetalle, e: React.MouseEvent) => {
@@ -284,15 +293,6 @@ export default function AdminMatriculasPage() {
         </div>
 
         <div className="flex items-center gap-2.5">
-          <button
-            type="button"
-            onClick={() => cargarDatos(true)}
-            className="p-2 rounded-xl border border-zinc-200 bg-white hover:bg-zinc-50 text-zinc-600 transition-colors shadow-xs"
-            title="Actualizar datos desde la base de datos"
-          >
-            <RefreshCw className={`w-4 h-4 ${actualizando ? 'animate-spin text-black' : ''}`} />
-          </button>
-
           {tabActiva === 'matriculas' ? (
             <button
               type="button"
@@ -338,7 +338,7 @@ export default function AdminMatriculasPage() {
                 : 'bg-zinc-200 text-zinc-700'
             }`}
           >
-            {matriculas.length}
+            {matriculasSede.length}
           </span>
         </button>
 
@@ -360,7 +360,7 @@ export default function AdminMatriculasPage() {
                 : 'bg-zinc-200 text-zinc-700'
             }`}
           >
-            {cursos.length}
+            {cursosFiltrados.length}
           </span>
         </button>
       </div>
@@ -391,11 +391,12 @@ export default function AdminMatriculasPage() {
             <select
               value={filtroSede}
               onChange={(e) => setFiltroSede(e.target.value)}
-              className="w-full px-3 py-2 rounded-xl bg-zinc-50 border border-zinc-200 text-zinc-900 text-xs font-medium focus:border-black outline-none"
+              className="w-full px-3 py-2 rounded-xl bg-zinc-50 border border-zinc-200 text-zinc-900 text-xs font-semibold focus:border-black outline-none"
             >
+              <option value="SEDE_ACTIVA">Sede {sedeInfo.ciudad} (Actual)</option>
+              <option value="ica">Sede Ica</option>
+              <option value="huancayo">Sede Huancayo</option>
               <option value="TODAS">Todas las Sedes</option>
-              <option value="Sede Central Ica">Sede Central Ica</option>
-              <option value="Sede Huancayo">Sede Huancayo</option>
             </select>
           </div>
 
@@ -445,14 +446,19 @@ export default function AdminMatriculasPage() {
         <div className="flex items-center justify-between text-[11px] text-zinc-500 pt-1 border-t border-zinc-100">
           <span>
             Mostrando <strong className="text-zinc-800">{matriculasFiltradas.length}</strong> de{' '}
-            <strong className="text-zinc-800">{matriculas.length}</strong> estudiantes registrados
+            <strong className="text-zinc-800">{matriculasSede.length}</strong> estudiantes registrados
+            {sedeEfectiva !== 'TODAS' && (
+              <span className="ml-1.5 px-2 py-0.5 rounded-full bg-zinc-100 text-zinc-700 font-mono text-[10px] font-bold">
+                {sedeEfectiva === 'huancayo' ? 'Sede Huancayo' : 'Sede Ica'}
+              </span>
+            )}
           </span>
-          {(busqueda || filtroSede !== 'TODAS' || filtroCurso !== 'TODOS' || filtroEstadoCuota !== 'TODOS' || filtroKit !== 'TODOS') && (
+          {(busqueda || filtroSede !== 'SEDE_ACTIVA' || filtroCurso !== 'TODOS' || filtroEstadoCuota !== 'TODOS' || filtroKit !== 'TODOS') && (
             <button
               type="button"
               onClick={() => {
                 setBusqueda('');
-                setFiltroSede('TODAS');
+                setFiltroSede('SEDE_ACTIVA');
                 setFiltroCurso('TODOS');
                 setFiltroEstadoCuota('TODOS');
                 setFiltroKit('TODOS');
@@ -474,7 +480,6 @@ export default function AdminMatriculasPage() {
                 <th className="px-5 py-3.5 font-bold">Alumno / Código</th>
                 <th className="px-5 py-3.5 font-bold">DNI & Celular</th>
                 <th className="px-5 py-3.5 font-bold">Curso & Turno</th>
-                <th className="px-5 py-3.5 font-bold text-center">Kit Oficial</th>
                 <th className="px-5 py-3.5 font-bold text-right">Saldo Deuda</th>
                 <th className="px-5 py-3.5 font-bold text-center">Estado Cuotas</th>
                 <th className="px-5 py-3.5 font-bold text-right">Acciones</th>
@@ -558,22 +563,6 @@ export default function AdminMatriculasPage() {
                         </p>
                       </td>
 
-                      {/* Kit de Barbería con Toggle Rápido */}
-                      <td className="px-5 py-3.5 text-center">
-                        <button
-                          type="button"
-                          onClick={(e) => handleToggleKitRapido(m, e)}
-                          className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold border transition-all cursor-pointer ${
-                            m.kit_entregado
-                              ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
-                              : 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100'
-                          }`}
-                          title="Clic para alternar estado de entrega"
-                        >
-                          <PackageCheck className="w-3 h-3" />
-                          <span>{m.kit_entregado ? 'Entregado' : 'Pendiente'}</span>
-                        </button>
-                      </td>
 
                       {/* Saldo Deuda */}
                       <td className="px-5 py-3.5 text-right font-mono">
@@ -661,7 +650,7 @@ export default function AdminMatriculasPage() {
         </>
       ) : (
         <AdminCursosList
-          cursos={cursos}
+          cursos={cursosFiltrados}
           onCrearCurso={() => {
             setCursoParaEditar(null);
             setShowModalCurso(true);
@@ -701,6 +690,7 @@ export default function AdminMatriculasPage() {
       <NuevaMatriculaModal
         isOpen={showModalNueva}
         onClose={() => setShowModalNueva(false)}
+        sedeInicial={sedeActiva === 'huancayo' ? 'Sede Huancayo' : 'Sede Central Ica'}
         onMatriculaCreada={(nueva) => {
           setMatriculas((prev) => [nueva, ...prev]);
           cargarDatos(true);

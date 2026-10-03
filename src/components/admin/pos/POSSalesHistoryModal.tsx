@@ -100,14 +100,6 @@ export function POSSalesHistoryModal({
           <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={cargarVentas}
-              title="Recargar"
-              className="p-2 rounded-xl border border-zinc-200 hover:bg-zinc-100 text-zinc-700 cursor-pointer"
-            >
-              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-            </button>
-            <button
-              type="button"
               onClick={onClose}
               className="p-2 rounded-xl border border-zinc-200 hover:bg-zinc-100 text-zinc-700 cursor-pointer"
             >

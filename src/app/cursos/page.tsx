@@ -251,25 +251,27 @@ export default function CursosPage() {
             </div>
 
             {/* Ficha Detallada del Curso Seleccionado */}
-            <div className="rounded-2xl bg-white border border-zinc-200 overflow-hidden shadow-sm grid grid-cols-1 lg:grid-cols-12 gap-8 p-6 sm:p-8">
+            <div className="rounded-2xl bg-white border border-zinc-200 shadow-sm grid grid-cols-1 lg:grid-cols-12 gap-8 p-6 sm:p-8">
               
               {/* Columna Izquierda: Imagen y Datos Básicos */}
-              <div className="lg:col-span-5 space-y-5">
+              <div className="lg:col-span-5 space-y-5 lg:sticky lg:top-24 self-start">
                 <div className="aspect-[4/3] rounded-xl overflow-hidden bg-zinc-100 border border-zinc-200 shadow-sm relative">
                   <img
                     src={cursoActivo.imagen_url}
                     alt={cursoActivo.titulo}
                     className="w-full h-full object-cover"
                   />
-                  <div className="absolute top-3 left-3 bg-white/95 backdrop-blur-md px-2.5 py-1 rounded text-zinc-900 text-[11px] font-mono border border-zinc-200 shadow-sm">
-                    {turnoActivo?.duracion_meses ? `${turnoActivo.duracion_meses} Meses` : `${cursoActivo.duracion_semanas} Semanas`} • Clases Presenciales
-                  </div>
                 </div>
 
-                <div className="p-4 rounded-xl bg-zinc-50 border border-zinc-200 space-y-2.5 text-xs text-zinc-600">
-                  <div className="flex items-center gap-2 text-zinc-950 font-semibold">
-                    <Store className="w-4 h-4 text-zinc-900" />
-                    <span>Clases Presenciales — {sedeActual.nombre}</span>
+                <div className="p-4 rounded-xl bg-zinc-50 border border-zinc-200 space-y-3 text-xs text-zinc-600">
+                  <div className="flex flex-wrap items-center gap-2 text-zinc-950 font-semibold">
+                    <span className="inline-flex items-center px-2 py-1 rounded bg-white text-zinc-800 text-[10px] font-mono border border-zinc-200 shadow-xs">
+                      {turnoActivo?.duracion_meses ? `${turnoActivo.duracion_meses} Meses` : `${cursoActivo.duracion_semanas} Semanas`}
+                    </span>
+                    <div className="flex items-center gap-1.5">
+                      <Store className="w-4 h-4 text-zinc-900" />
+                      <span>Clases Presenciales — {sedeActual.nombre}</span>
+                    </div>
                   </div>
                   <p className="text-[11px] leading-relaxed">
                     Estaciones de trabajo individuales con espejos, tomas eléctricas para máquinas y modelos reales provistos por la escuela en {sedeActual.direccion}.
@@ -280,6 +282,65 @@ export default function CursosPage() {
                     </div>
                   )}
                 </div>
+
+                {/* Inversión y Botón de WhatsApp (Solo visible en Desktop, fijo en la columna izquierda) */}
+                <div className="hidden lg:flex p-4 sm:p-5 rounded-2xl bg-zinc-50 border border-zinc-200 shadow-sm flex-col gap-4">
+                  <div className="space-y-1">
+                    <div className="flex items-baseline justify-between gap-4 border-b border-zinc-200/60 pb-3 mb-3">
+                      <div>
+                        <span className="text-[10px] text-zinc-500 block font-mono">Matrícula Hoy</span>
+                        <span className="text-xl font-black text-zinc-950 font-mono">
+                          {formatCurrency(cursoActivo.costo_matricula)}
+                        </span>
+                      </div>
+                      <div className="text-right">
+                        <span className="text-[10px] text-zinc-500 block font-mono">Mensualidad</span>
+                        <span className="text-xl font-black text-zinc-950 font-mono">
+                          {formatCurrency(turnoActivo?.costo_mensualidad || cursoActivo.costo_mensualidad)}
+                        </span>
+                      </div>
+                    </div>
+                    <p className="text-[10px] text-zinc-500 font-mono text-center flex justify-center items-center gap-1">
+                      <Check className="w-3 h-3 text-emerald-500" />
+                      Pagos seguros con Yape, Plin o Efectivo
+                    </p>
+                  </div>
+
+                  <div className="flex flex-col gap-2.5">
+                    <button
+                      type="button"
+                      onClick={(e) => handleInscribirmeAlCarrito(e)}
+                      className={`w-full px-6 py-3.5 rounded-xl text-xs font-bold uppercase tracking-wider transition-all text-center shadow-sm flex items-center justify-center gap-2 cursor-pointer active:scale-95 ${
+                        agregadoAnim
+                          ? 'bg-emerald-600 text-white'
+                          : 'bg-black text-white hover:bg-zinc-800'
+                      }`}
+                    >
+                      {agregadoAnim ? (
+                        <>
+                          <Check className="w-4 h-4 text-white" />
+                          <span>¡Matrícula Añadida!</span>
+                        </>
+                      ) : (
+                        <>
+                          <ShoppingCart className="w-4 h-4" />
+                          <span>Inscribirme Ahora</span>
+                        </>
+                      )}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleInscripcionWhatsApp}
+                      className="w-full px-4 py-3.5 rounded-xl text-xs font-semibold uppercase tracking-wider text-zinc-700 bg-white hover:bg-zinc-100 border border-zinc-200 transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                      title="Consultar detalles por WhatsApp"
+                    >
+                      <MessageCircle className="w-4 h-4 text-emerald-600" />
+                      <span className="inline">Dudas por WhatsApp</span>
+                    </button>
+                  </div>
+                </div>
+
               </div>
 
               {/* Columna Derecha: Temario Desplegable y Calculadora */}
@@ -323,38 +384,13 @@ export default function CursosPage() {
                       const realIndex = (temarioPage - 1) * 10 + idx;
                       const abierto = acordeonAbierto === realIndex;
                       return (
-                        <div key={realIndex} className="bg-white">
-                          <button
-                            type="button"
-                            onClick={() => setAcordeonAbierto(abierto ? null : realIndex)}
-                            className="w-full p-3.5 text-left flex items-center justify-between hover:bg-zinc-50 transition-colors"
-                          >
-                            <span className="text-xs font-semibold text-zinc-900 flex items-center gap-2">
-                              <span className="w-5 h-5 rounded-full bg-zinc-100 text-zinc-700 text-[10px] font-mono flex items-center justify-center shrink-0 border border-zinc-200">
-                                {realIndex + 1}
-                              </span>
-                              {tema}
+                        <div key={realIndex} className="bg-white p-3.5 text-left flex items-center hover:bg-zinc-50 transition-colors">
+                          <span className="text-xs font-semibold text-zinc-900 flex items-center gap-2">
+                            <span className="w-5 h-5 rounded-full bg-zinc-100 text-zinc-700 text-[10px] font-mono flex items-center justify-center shrink-0 border border-zinc-200">
+                              {realIndex + 1}
                             </span>
-                            {abierto ? (
-                              <ChevronUp className="w-4 h-4 text-zinc-400" />
-                            ) : (
-                              <ChevronDown className="w-4 h-4 text-zinc-400" />
-                            )}
-                          </button>
-
-                          <AnimatePresence>
-                            {abierto && (
-                              <motion.div
-                                initial={{ opacity: 0, height: 0 }}
-                                animate={{ opacity: 1, height: 'auto' }}
-                                exit={{ opacity: 0, height: 0 }}
-                                transition={{ duration: 0.2 }}
-                                className="px-4 pb-3 pt-1 text-[11px] text-zinc-600 bg-zinc-50 border-t border-zinc-100 leading-relaxed"
-                              >
-                                Práctica guiada con máquinas y tijeras, corrección de postura, uso adecuado de palanca y técnicas de desvanecido aplicadas a este módulo.
-                              </motion.div>
-                            )}
-                          </AnimatePresence>
+                            {tema}
+                          </span>
                         </div>
                       );
                     })}
@@ -463,33 +499,34 @@ export default function CursosPage() {
               </div>
             </div>
 
-            {/* Inversión y Botón de WhatsApp */}
-            <div className="p-4 rounded-xl bg-zinc-50 border border-zinc-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            {/* Inversión y Botón de WhatsApp (Solo visible en Móvil, al final del flujo) */}
+            <div className="flex lg:hidden p-4 sm:p-5 rounded-2xl bg-zinc-50 border border-zinc-200 shadow-sm flex-col gap-4 mt-6">
               <div className="space-y-1">
-                <div className="flex items-baseline gap-4">
+                <div className="flex items-baseline justify-between gap-4 border-b border-zinc-200/60 pb-3 mb-3">
                   <div>
                     <span className="text-[10px] text-zinc-500 block font-mono">Matrícula Hoy</span>
-                    <span className="text-lg font-bold text-zinc-950 font-mono">
+                    <span className="text-xl font-black text-zinc-950 font-mono">
                       {formatCurrency(cursoActivo.costo_matricula)}
                     </span>
                   </div>
-                  <div>
+                  <div className="text-right">
                     <span className="text-[10px] text-zinc-500 block font-mono">Mensualidad</span>
-                    <span className="text-lg font-bold text-zinc-950 font-mono">
+                    <span className="text-xl font-black text-zinc-950 font-mono">
                       {formatCurrency(turnoActivo?.costo_mensualidad || cursoActivo.costo_mensualidad)}
                     </span>
                   </div>
                 </div>
-                <p className="text-[10px] text-zinc-500 font-mono">
-                  {sedeActual.nombre} — Pagos con Yape, Plin o en Efectivo
+                <p className="text-[10px] text-zinc-500 font-mono text-center flex justify-center items-center gap-1">
+                  <Check className="w-3 h-3 text-emerald-500" />
+                  Pagos seguros con Yape, Plin o Efectivo
                 </p>
               </div>
 
-              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
+              <div className="flex flex-col gap-2.5">
                 <button
                   type="button"
                   onClick={(e) => handleInscribirmeAlCarrito(e)}
-                  className={`px-6 py-3.5 rounded-xl text-xs font-bold uppercase tracking-wider transition-all text-center shadow-sm flex items-center justify-center gap-2 cursor-pointer active:scale-95 ${
+                  className={`w-full px-6 py-3.5 rounded-xl text-xs font-bold uppercase tracking-wider transition-all text-center shadow-sm flex items-center justify-center gap-2 cursor-pointer active:scale-95 ${
                     agregadoAnim
                       ? 'bg-emerald-600 text-white'
                       : 'bg-black text-white hover:bg-zinc-800'
@@ -498,12 +535,12 @@ export default function CursosPage() {
                   {agregadoAnim ? (
                     <>
                       <Check className="w-4 h-4 text-white" />
-                      <span>¡Matrícula Añadida al Carrito!</span>
+                      <span>¡Matrícula Añadida!</span>
                     </>
                   ) : (
                     <>
                       <ShoppingCart className="w-4 h-4" />
-                      <span>Inscribirme en {turnoActivo.nombre}</span>
+                      <span>Inscribirme Ahora</span>
                     </>
                   )}
                 </button>
@@ -511,18 +548,19 @@ export default function CursosPage() {
                 <button
                   type="button"
                   onClick={handleInscripcionWhatsApp}
-                  className="px-4 py-3.5 rounded-xl text-xs font-semibold uppercase tracking-wider text-zinc-700 bg-white hover:bg-zinc-100 border border-zinc-200 transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                  className="w-full px-4 py-3.5 rounded-xl text-xs font-semibold uppercase tracking-wider text-zinc-700 bg-white hover:bg-zinc-100 border border-zinc-200 transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
                   title="Consultar detalles por WhatsApp"
                 >
                   <MessageCircle className="w-4 h-4 text-emerald-600" />
-                  <span className="hidden sm:inline">Dudas por WhatsApp</span>
+                  <span className="inline">Dudas por WhatsApp</span>
                 </button>
               </div>
             </div>
 
+            </div>
+
           </div>
         </div>
-      </div>
     ) : null}
 
       </section>

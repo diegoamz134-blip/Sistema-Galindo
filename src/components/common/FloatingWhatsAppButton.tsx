@@ -9,13 +9,29 @@ export function FloatingWhatsAppButton() {
   const { sedeSeleccionada } = useCart();
   const sedeActual = SEDES[sedeSeleccionada] || SEDES['ica'];
   const [hovered, setHovered] = useState(false);
+  const [hasCookieConsent, setHasCookieConsent] = useState(true);
+
+  React.useEffect(() => {
+    try {
+      const consent = localStorage.getItem('galindo_cookie_consent_v1');
+      setHasCookieConsent(!!consent);
+    } catch {}
+
+    const handleUpdate = () => setHasCookieConsent(true);
+    window.addEventListener('galindo_cookie_consent_updated', handleUpdate);
+    return () => window.removeEventListener('galindo_cookie_consent_updated', handleUpdate);
+  }, []);
 
   const whatsappUrl = `https://wa.me/${sedeActual.whatsapp}?text=${encodeURIComponent(
     `Hola Galindo Barber (${sedeActual.nombre}). Deseo realizar una consulta sobre los cursos y productos disponibles en ${sedeActual.ciudad}.`
   )}`;
 
   return (
-    <div className="fixed bottom-5 right-5 sm:bottom-6 sm:right-6 z-40 flex items-center gap-2.5 pointer-events-none">
+    <div
+      className={`fixed right-5 sm:right-6 z-40 flex items-center gap-2.5 pointer-events-none transition-all duration-300 ${
+        hasCookieConsent ? 'bottom-5 sm:bottom-6' : 'bottom-24 sm:bottom-6'
+      }`}
+    >
       
       {/* Tooltip / Cartel Flotante Elegante (Desktop y Tablet) */}
       <AnimatePresence>

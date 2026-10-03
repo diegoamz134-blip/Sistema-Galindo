@@ -16,6 +16,8 @@ import {
   AlertTriangle,
   ChevronLeft,
   ChevronRight,
+  EyeOff,
+  Eye,
 } from 'lucide-react';
 import { formatCurrency } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
@@ -29,6 +31,7 @@ import {
   deleteProduct,
   CreateProductInput,
   UpdateProductInput,
+  toggleProductoActivo,
 } from '@/lib/products-service';
 import { useSede } from '@/context/SedeContext';
 
@@ -129,7 +132,7 @@ export default function AdminProductosPage() {
   const [precioCompra, setPrecioCompra] = useState('');
   const [precioVenta, setPrecioVenta] = useState('');
   const [stockLocal, setStockLocal] = useState('');
-  const [stockMinimo, setStockMinimo] = useState('3');
+  const [stockMinimo, setStockMinimo] = useState('5');
   const [imagenUrl, setImagenUrl] = useState('');
   const [imagenPesoKb, setImagenPesoKb] = useState<number | null>(null);
   const [isCompressing, setIsCompressing] = useState(false);
@@ -158,6 +161,11 @@ export default function AdminProductosPage() {
     return () => clearTimeout(timer);
   }, [busqueda]);
 
+  // Resetear paginación al cambiar de sede
+  useEffect(() => {
+    setPagina(1);
+  }, [sedeActiva]);
+
   // Cargar datos paginados (exactamente 20 por página)
   const cargarDatos = useCallback(
     async (targetPage = pagina, silencioso = false) => {
@@ -169,6 +177,7 @@ export default function AdminProductosPage() {
             porPagina: POR_PAGINA,
             busqueda: debouncedBusqueda,
             categoriaId: categoriaFiltro,
+            sedeId: sedeActiva,
           }),
           categorias.length > 0 ? Promise.resolve(categorias) : getCategories(),
         ]);
@@ -187,12 +196,12 @@ export default function AdminProductosPage() {
         if (!silencioso) setIsRefreshing(false);
       }
     },
-    [pagina, debouncedBusqueda, categoriaFiltro, categorias]
+    [pagina, debouncedBusqueda, categoriaFiltro, categorias, sedeActiva]
   );
 
   useEffect(() => {
     cargarDatos(pagina, false);
-  }, [pagina, debouncedBusqueda, categoriaFiltro]);
+  }, [pagina, debouncedBusqueda, categoriaFiltro, sedeActiva]);
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
@@ -226,7 +235,7 @@ export default function AdminProductosPage() {
       supabase.removeChannel(channel);
       window.removeEventListener('focus', onFocus);
     };
-  }, [pagina, debouncedBusqueda, categoriaFiltro]);
+  }, [pagina, debouncedBusqueda, categoriaFiltro, sedeActiva]);
 
   // Generador 100% automático de SKU correlativo único
   const generarSkuAutomatico = useCallback(() => {
@@ -241,7 +250,7 @@ export default function AdminProductosPage() {
     setPrecioCompra('');
     setPrecioVenta('');
     setStockLocal('');
-    setStockMinimo('3');
+    setStockMinimo('5');
     setImagenUrl('');
     setImagenPesoKb(null);
     setDescripcion('');
@@ -261,7 +270,7 @@ export default function AdminProductosPage() {
     setPrecioCompra(String(p.precio_compra ?? '0'));
     setPrecioVenta(String(p.precio_venta ?? '0'));
     setStockLocal(String(sedeActiva === 'ica' ? (p.stock_ica ?? p.stock ?? '0') : (p.stock_huancayo ?? '0')));
-    setStockMinimo(String(p.stock_minimo ?? '3'));
+    setStockMinimo(String(p.stock_minimo || 5));
     setImagenUrl(p.imagenes && p.imagenes.length > 0 ? p.imagenes[0] : '');
     setImagenPesoKb(null);
     setDescripcion(p.descripcion || '');
@@ -287,6 +296,22 @@ export default function AdminProductosPage() {
       console.error('Error al eliminar producto:', err);
     } finally {
       setIsDeleting(false);
+    }
+  };
+
+  const handleToggleActivo = async (p: Producto) => {
+    setMenuOpenId(null);
+    try {
+      const res = await toggleProductoActivo(p.id, !p.activo);
+      if (res.success) {
+        setProductos((prev) =>
+          prev.map((prod) => (prod.id === p.id ? { ...prod, activo: !p.activo } : prod))
+        );
+      } else {
+        alert(`Error: ${res.error}`);
+      }
+    } catch (err) {
+      console.error('Error toggling product active status:', err);
     }
   };
 
@@ -460,17 +485,6 @@ export default function AdminProductosPage() {
         <div className="flex items-center gap-2.5">
           <button
             type="button"
-            onClick={handleRefresh}
-            disabled={isRefreshing}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium bg-white border border-zinc-200 hover:border-zinc-300 text-zinc-700 shadow-xs transition-colors cursor-pointer disabled:opacity-50"
-            title="Recargar inventario desde Supabase"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 text-zinc-500 ${isRefreshing ? 'animate-spin text-emerald-600' : ''}`} />
-            <span>{isRefreshing ? 'Recargando...' : 'Recargar'}</span>
-          </button>
-
-          <button
-            type="button"
             onClick={abrirModalNuevo}
             className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold bg-zinc-950 text-white hover:bg-zinc-800 shadow-sm transition-all cursor-pointer"
           >
@@ -571,7 +585,11 @@ export default function AdminProductosPage() {
               </thead>
               <tbody className="divide-y divide-zinc-100">
                 {productosFiltrados.map((p) => {
-                  const stockBajo = p.stock <= p.stock_minimo;
+                  // Stock de la sede activa
+                  const stockSede = sedeActiva === 'huancayo'
+                    ? (p.stock_huancayo ?? 0)
+                    : (p.stock_ica ?? p.stock ?? 0);
+                  const stockBajo = stockSede <= p.stock_minimo;
                   const catNombre =
                     p.categoria?.nombre ||
                     categorias.find((c) => c.id === p.categoria_id)?.nombre ||
@@ -613,26 +631,28 @@ export default function AdminProductosPage() {
                         {formatCurrency(p.precio_venta)}
                       </td>
                       <td className="px-5 py-3.5 text-center">
-                        <div className="inline-flex flex-col items-center">
-                          <span
-                            className={`inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-mono border ${
-                              stockBajo
-                                ? 'border-amber-300 bg-amber-50 text-amber-800 font-bold'
-                                : 'border-zinc-200 bg-zinc-50 text-zinc-700'
-                            }`}
-                          >
-                            {p.stock} un.
-                          </span>
-                          <span className="text-[10px] font-mono text-zinc-400 mt-1">
-                            ICA: <b className="text-zinc-700">{p.stock_ica ?? p.stock}</b> • HYO: <b className="text-zinc-700">{p.stock_huancayo ?? 0}</b>
-                          </span>
-                        </div>
+                        <span
+                          className={`inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-mono border ${
+                            stockBajo
+                              ? 'border-amber-300 bg-amber-50 text-amber-800 font-bold'
+                              : 'border-zinc-200 bg-zinc-50 text-zinc-700'
+                          }`}
+                        >
+                          {stockSede} un.
+                        </span>
                       </td>
                       <td className="px-5 py-3.5 text-center">
-                        <span className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200/50">
-                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                          Activo
-                        </span>
+                        {p.activo ? (
+                          <span className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200/50">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                            Activo
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 text-[11px] font-medium text-zinc-500 bg-zinc-100 px-2 py-0.5 rounded-full border border-zinc-200/50">
+                            <span className="w-1.5 h-1.5 rounded-full bg-zinc-400" />
+                            Inactivo
+                          </span>
+                        )}
                       </td>
                       <td className="px-5 py-3.5 text-right relative">
                         <button
@@ -664,6 +684,23 @@ export default function AdminProductosPage() {
                               >
                                 <Pencil className="w-3.5 h-3.5 text-zinc-500" />
                                 <span>Editar producto</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleToggleActivo(p)}
+                                className="w-full flex items-center gap-2.5 px-3.5 py-2 text-xs text-zinc-700 hover:bg-zinc-50 hover:text-zinc-950 font-medium transition-colors cursor-pointer"
+                              >
+                                {p.activo ? (
+                                  <>
+                                    <EyeOff className="w-3.5 h-3.5 text-zinc-500" />
+                                    <span>Desactivar / Ocultar</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <Eye className="w-3.5 h-3.5 text-zinc-500" />
+                                    <span>Activar / Mostrar</span>
+                                  </>
+                                )}
                               </button>
                               <div className="my-1 border-t border-zinc-100" />
                               <button

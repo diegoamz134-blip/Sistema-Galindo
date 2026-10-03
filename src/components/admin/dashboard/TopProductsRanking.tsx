@@ -6,14 +6,14 @@ import { Award, ArrowRight } from 'lucide-react';
 import { formatCurrency } from '@/lib/utils';
 import { TopProductItem, getTopProductsRanking } from '@/lib/dashboard-service';
 
-export function TopProductsRanking() {
+export function TopProductsRanking({ sedeId }: { sedeId?: string }) {
   const [products, setProducts] = useState<TopProductItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     let isMounted = true;
     async function load() {
-      const res = await getTopProductsRanking();
+      const res = await getTopProductsRanking(sedeId);
       if (isMounted) {
         setProducts(res);
         setIsLoading(false);
@@ -23,7 +23,7 @@ export function TopProductsRanking() {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [sedeId]);
 
   return (
     <div className="p-6 rounded-2xl bg-white border border-zinc-200 shadow-sm space-y-5">

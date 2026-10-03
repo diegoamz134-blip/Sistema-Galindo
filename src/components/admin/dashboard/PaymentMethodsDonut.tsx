@@ -6,14 +6,14 @@ import { CreditCard } from 'lucide-react';
 import { formatCurrency } from '@/lib/utils';
 import { PaymentMethodItem, getPaymentMethodsBreakdown } from '@/lib/dashboard-service';
 
-export function PaymentMethodsDonut() {
+export function PaymentMethodsDonut({ sedeId }: { sedeId?: string }) {
   const [data, setData] = useState<PaymentMethodItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     let isMounted = true;
     async function load() {
-      const res = await getPaymentMethodsBreakdown();
+      const res = await getPaymentMethodsBreakdown(sedeId);
       if (isMounted) {
         setData(res);
         setIsLoading(false);
@@ -23,7 +23,7 @@ export function PaymentMethodsDonut() {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [sedeId]);
 
   const total = data.reduce((acc, curr) => acc + curr.monto, 0);
   const chartData = total > 0 ? data : [{ name: 'Sin cobros', monto: 1, porcentaje: 0, color: '#e4e4e7' }];

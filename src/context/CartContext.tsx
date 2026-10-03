@@ -112,9 +112,10 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         setSedeSeleccionadaState(savedSede);
       }
 
-      // Comprobar si ya se seleccionó sede en esta sesión de navegación
+      // Comprobar si ya se seleccionó sede en esta sesión de navegación o si pidió recordarlo
       const alreadyPrompted = sessionStorage.getItem(SEDE_PROMPTED_KEY);
-      if (!alreadyPrompted) {
+      const isRemembered = localStorage.getItem('galindo_sede_remembered') === 'true';
+      if (!alreadyPrompted && !isRemembered) {
         // Mostrar modal inicial estilo licorería para seleccionar sede
         setIsWelcomeModalOpen(true);
       }
@@ -158,6 +159,9 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       sessionStorage.setItem(SEDE_PROMPTED_KEY, 'true');
       if (recordar) {
         localStorage.setItem(SEDE_STORAGE_KEY, nuevaSede);
+        localStorage.setItem('galindo_sede_remembered', 'true');
+      } else {
+        localStorage.removeItem('galindo_sede_remembered');
       }
     } catch {}
     setIsWelcomeModalOpen(false);

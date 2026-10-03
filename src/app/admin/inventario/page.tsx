@@ -382,15 +382,6 @@ export default function AdminInventarioPage() {
 
         <div className="flex items-center gap-2.5">
           <button
-            onClick={() => cargarDatos(false, pagina)}
-            disabled={isRefreshing}
-            className="p-2.5 rounded-xl border border-zinc-200 hover:bg-zinc-50 text-zinc-700 transition-colors disabled:opacity-50"
-            title="Refrescar datos"
-          >
-            <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
-          </button>
-
-          <button
             onClick={() => {
               setFormTrasladoError(null);
               setSelectedProdTrasladoId(productos[0]?.id || '');

@@ -14,7 +14,7 @@ import { TrendingUp, ArrowUpRight } from 'lucide-react';
 import { formatCurrency } from '@/lib/utils';
 import { SalesDataPoint, getSalesTrendData } from '@/lib/dashboard-service';
 
-export function SalesTrendChart() {
+export function SalesTrendChart({ sedeId }: { sedeId?: string }) {
   const [periodo, setPeriodo] = useState<'7d' | '30d' | 'año'>('7d');
   const [data, setData] = useState<SalesDataPoint[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -23,7 +23,7 @@ export function SalesTrendChart() {
     let isMounted = true;
     async function loadData() {
       setIsLoading(true);
-      const res = await getSalesTrendData(periodo);
+      const res = await getSalesTrendData(periodo, sedeId);
       if (isMounted) {
         setData(res);
         setIsLoading(false);
@@ -33,7 +33,7 @@ export function SalesTrendChart() {
     return () => {
       isMounted = false;
     };
-  }, [periodo]);
+  }, [periodo, sedeId]);
 
   const totalPeriodo = data.reduce((acc, curr) => acc + curr.total, 0);
 

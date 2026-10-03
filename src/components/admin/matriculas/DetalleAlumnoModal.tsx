@@ -15,7 +15,7 @@ import {
   MapPin,
   ShieldAlert,
 } from 'lucide-react';
-import { MatriculaConDetalle, actualizarEstadoAcademico } from '@/lib/academia-service';
+import { MatriculaConDetalle, actualizarEstadoAcademico, actualizarSedeMatricula, matchSede } from '@/lib/academia-service';
 import { CuotaMatricula, EstadoAcademico } from '@/types/database';
 import { formatCurrency, formatDate } from '@/lib/utils';
 import { RegistrarPagoCuotaModal } from './RegistrarPagoCuotaModal';
@@ -56,6 +56,18 @@ export function DetalleAlumnoModal({
     await actualizarEstadoAcademico(currentMatricula.id, nuevoEstado);
     onUpdate();
     setActualizandoEstado(false);
+  };
+
+  const [actualizandoSede, setActualizandoSede] = useState(false);
+  const handleSedeChange = async (nuevaSede: string) => {
+    setActualizandoSede(true);
+    setCurrentMatricula((prev) => ({
+      ...prev,
+      sede: nuevaSede,
+    }));
+    await actualizarSedeMatricula(currentMatricula.id, nuevaSede);
+    onUpdate();
+    setActualizandoSede(false);
   };
 
   // Enlace directo a WhatsApp de cobranza o información
@@ -148,8 +160,19 @@ export function DetalleAlumnoModal({
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div className="p-3 rounded-xl bg-zinc-50 border border-zinc-200">
                 <p className="text-[10px] uppercase font-bold text-zinc-400 tracking-wider">Programa</p>
-                <p className="font-bold text-zinc-900 mt-0.5">{currentMatricula.curso_nombre || currentMatricula.curso?.titulo}</p>
-                <p className="text-[11px] text-zinc-500 mt-0.5">Sede: {currentMatricula.sede}</p>
+                <p className="font-bold text-zinc-900 mt-0.5 truncate">{currentMatricula.curso_nombre || currentMatricula.curso?.titulo}</p>
+                <div className="mt-1.5">
+                  <label className="text-[10px] uppercase font-bold text-zinc-500 block">Sede Asignada:</label>
+                  <select
+                    value={matchSede(currentMatricula.sede, 'huancayo') ? 'Sede Huancayo' : 'Sede Central Ica'}
+                    disabled={actualizandoSede}
+                    onChange={(e) => handleSedeChange(e.target.value)}
+                    className="mt-0.5 w-full px-2 py-1 rounded bg-white border border-zinc-300 font-bold text-zinc-900 text-xs outline-none focus:border-black"
+                  >
+                    <option value="Sede Central Ica">Sede Central Ica</option>
+                    <option value="Sede Huancayo">Sede Huancayo</option>
+                  </select>
+                </div>
               </div>
 
               <div className="p-3 rounded-xl bg-zinc-50 border border-zinc-200">

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import {
   Wallet,
@@ -38,7 +38,7 @@ export default function AdminDashboardPage() {
   const { sedeActiva, sedeInfo } = useSede();
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [movimientos, setMovimientos] = useState<MovimientoCaja[]>([]);
-  const [matriculas, setMatriculas] = useState<Matricula[]>([]);
+  const [matriculas, setMatriculas] = useState<any[]>([]);
   const [pedidosRecientes, setPedidosRecientes] = useState<PedidoReciente[]>([]);
   const [actualizandoPedidoId, setActualizandoPedidoId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -46,57 +46,13 @@ export default function AdminDashboardPage() {
   const [lastUpdated, setLastUpdated] = useState<string>('');
   const [refreshKey, setRefreshKey] = useState<number>(0);
 
-  useEffect(() => {
-    let isMounted = true;
-
-    async function init() {
-      try {
-        const [sumData, movData, matData, pedData] = await Promise.all([
-          getDashboardSummary(sedeActiva),
-          getRecentMovements(),
-          getActiveStudents(),
-          getRecentOrders(6, sedeActiva),
-        ]);
-        if (!isMounted) return;
-        setSummary(sumData);
-        setMovimientos(movData);
-        setMatriculas(matData);
-        setPedidosRecientes(pedData);
-        const now = new Date();
-        setLastUpdated(
-          now.toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
-        );
-      } catch (err) {
-        console.error('Error al cargar datos del dashboard:', err);
-      } finally {
-        if (isMounted) {
-          setIsLoading(false);
-        }
-      }
-    }
-
-    init();
-
-    // Recargar cuando cambia la sede
-    const handleSedeChange = () => {
-      setIsLoading(true);
-      init();
-    };
-    window.addEventListener('galindo_sede_changed', handleSedeChange);
-
-    return () => {
-      isMounted = false;
-      window.removeEventListener('galindo_sede_changed', handleSedeChange);
-    };
-  }, [sedeActiva]);
-
-  const handleRefresh = async () => {
-    setIsRefreshing(true);
+  const cargarDashboard = useCallback(async (silencioso = false) => {
+    if (!silencioso) setIsLoading(true);
     try {
       const [sumData, movData, matData, pedData] = await Promise.all([
         getDashboardSummary(sedeActiva),
-        getRecentMovements(),
-        getActiveStudents(),
+        getRecentMovements(6, sedeActiva),
+        getActiveStudents(5, sedeActiva),
         getRecentOrders(6, sedeActiva),
       ]);
       setSummary(sumData);
@@ -107,13 +63,25 @@ export default function AdminDashboardPage() {
       setLastUpdated(
         now.toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
       );
-      setRefreshKey((k) => k + 1);
+      if (!silencioso) setRefreshKey((k) => k + 1);
     } catch (err) {
-      console.error('Error al recargar dashboard:', err);
+      console.error('Error al cargar datos del dashboard:', err);
     } finally {
+      setIsLoading(false);
       setIsRefreshing(false);
     }
-  };
+  }, [sedeActiva]);
+
+  // Carga inicial y cuando cambia la sede
+  useEffect(() => {
+    cargarDashboard();
+  }, [cargarDashboard]);
+
+  const handleRefresh = useCallback(async () => {
+    setIsRefreshing(true);
+    await cargarDashboard(true);
+    setRefreshKey((k) => k + 1);
+  }, [cargarDashboard]);
 
   const handleMarcarEntregado = async (pedidoId: string) => {
     setActualizandoPedidoId(pedidoId);
@@ -123,7 +91,7 @@ export default function AdminDashboardPage() {
         setPedidosRecientes((prev) =>
           prev.map((p) => (p.id === pedidoId ? { ...p, estado: 'ENTREGADO' } : p))
         );
-        handleRefresh();
+        cargarDashboard(true);
       }
     } finally {
       setActualizandoPedidoId(null);
@@ -132,31 +100,28 @@ export default function AdminDashboardPage() {
 
   // Sincronización en Tiempo Real (Supabase Realtime WebSockets + re-enfoque)
   useEffect(() => {
-    // 1. Canal WebSocket en vivo para escuchar ventas, cobros, matrículas y productos
     const channel = supabase
       .channel('admin_dashboard_live_channel')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'pedidos' }, () => handleRefresh())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'pedido_items' }, () => handleRefresh())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'movimientos_caja' }, () => handleRefresh())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'productos' }, () => handleRefresh())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'cajas_chicas' }, () => handleRefresh())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'matriculas' }, () => handleRefresh())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'pedidos' }, () => cargarDashboard(true))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'pedido_items' }, () => cargarDashboard(true))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'movimientos_caja' }, () => cargarDashboard(true))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'productos' }, () => cargarDashboard(true))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'cajas_chicas' }, () => cargarDashboard(true))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'matriculas' }, () => cargarDashboard(true))
       .subscribe();
 
-    const onFocus = () => handleRefresh();
+    const onFocus = () => cargarDashboard(true);
     window.addEventListener('focus', onFocus);
-    window.addEventListener('storage', onFocus);
     window.addEventListener('galindo_pos_venta_realizada', onFocus);
     window.addEventListener('galindo_pedido_web_realizado', onFocus);
 
     return () => {
       supabase.removeChannel(channel);
       window.removeEventListener('focus', onFocus);
-      window.removeEventListener('storage', onFocus);
       window.removeEventListener('galindo_pos_venta_realizada', onFocus);
       window.removeEventListener('galindo_pedido_web_realizado', onFocus);
     };
-  }, []);
+  }, [cargarDashboard]);
 
   return (
     <div className="space-y-8 max-w-7xl mx-auto pb-10">
@@ -174,23 +139,6 @@ export default function AdminDashboardPage() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2.5">
-          {/* Botón de Actualizar / Refrescar */}
-          <button
-            type="button"
-            onClick={handleRefresh}
-            disabled={isRefreshing}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium bg-white border border-zinc-200 hover:border-zinc-300 text-zinc-700 shadow-xs transition-colors cursor-pointer disabled:opacity-50"
-            title="Recargar datos desde la base de datos"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 text-zinc-500 ${isRefreshing ? 'animate-spin text-emerald-600' : ''}`} />
-            <span>{isRefreshing ? 'Actualizando...' : 'Actualizar'}</span>
-            {lastUpdated && !isRefreshing && (
-              <span className="text-[10px] text-zinc-400 font-mono pl-1 hidden sm:inline">
-                ({lastUpdated})
-              </span>
-            )}
-          </button>
-
           <Link
             href="/admin/productos"
             className="px-3 py-1.5 rounded-xl text-xs font-medium bg-white border border-zinc-200 hover:border-zinc-300 text-zinc-800 shadow-xs transition-colors"
@@ -257,7 +205,7 @@ export default function AdminDashboardPage() {
             </p>
             <div className="flex items-center justify-between mt-2 text-[11px]">
               <span className="text-zinc-500">Academia Galindo</span>
-              <span className="text-blue-600 font-medium font-mono">Sede Ica</span>
+              <span className="text-blue-600 font-medium font-mono capitalize">Sede {sedeInfo.ciudad}</span>
             </div>
           </div>
         </div>
@@ -300,10 +248,10 @@ export default function AdminDashboardPage() {
       {/* Gráficos Principales: Evolución de Ventas y Métodos de Pago */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2">
-          <SalesTrendChart key={`trend-${refreshKey}`} />
+          <SalesTrendChart key={`trend-${sedeActiva}-${refreshKey}`} sedeId={sedeActiva} />
         </div>
         <div className="lg:col-span-1">
-          <PaymentMethodsDonut key={`donut-${refreshKey}`} />
+          <PaymentMethodsDonut key={`donut-${sedeActiva}-${refreshKey}`} sedeId={sedeActiva} />
         </div>
       </div>
 
@@ -311,7 +259,7 @@ export default function AdminDashboardPage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Columna Izquierda: Ranking Top 5 Productos */}
         <div className="lg:col-span-1">
-          <TopProductsRanking key={`top-${refreshKey}`} />
+          <TopProductsRanking key={`top-${sedeActiva}-${refreshKey}`} sedeId={sedeActiva} />
         </div>
 
         {/* Columna Derecha (2 cols): Pedidos Web en Vivo, Movimientos & Alumnos */}
@@ -486,7 +434,7 @@ export default function AdminDashboardPage() {
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {matriculas.map((mat) => {
-                  const cuotaVencida = mat.cuotas?.find((c) => c.estado === 'VENCIDA');
+                  const cuotaVencida = mat.cuotas?.find((c: any) => c.estado === 'VENCIDA');
                   return (
                     <div
                       key={mat.id}

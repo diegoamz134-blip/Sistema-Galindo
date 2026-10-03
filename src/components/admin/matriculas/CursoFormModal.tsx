@@ -22,6 +22,7 @@ import { Curso, TurnoOption } from '@/types/database';
 import { CursoInput, guardarCurso, DEFAULT_TURNOS } from '@/lib/academia-service';
 import { formatCurrency } from '@/lib/utils';
 import { comprimirFotoWeb } from '@/lib/image-utils';
+import { useSede } from '@/context/SedeContext';
 
 interface CursoFormModalProps {
   isOpen: boolean;
@@ -220,6 +221,7 @@ export function CursoFormModal({
   onCursoGuardado,
   onCursoEliminado,
 }: CursoFormModalProps) {
+  const { sedeActiva } = useSede();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isCompressing, setIsCompressing] = useState(false);
   const [imagenPesoKb, setImagenPesoKb] = useState<number | null>(null);
@@ -430,6 +432,7 @@ export function CursoFormModal({
       const payload: CursoInput = {
         id: cursoAEditar?.id,
         titulo: titulo.trim(),
+        slug: cursoAEditar?.slug,
         descripcion_corta: descripcionCorta.trim(),
         temario_detallado: temario,
         duracion_semanas: Number(duracionSemanas) || 8,
@@ -443,6 +446,7 @@ export function CursoFormModal({
         activo,
         destacado,
         turnos,
+        sede: sedeActiva,
       };
 
       const res = await guardarCurso(payload);

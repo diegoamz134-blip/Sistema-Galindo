@@ -78,6 +78,10 @@ export default function CheckoutPage() {
   const [notas, setNotas] = useState('');
   const [aceptaTerminos, setAceptaTerminos] = useState(true);
 
+  // Protección anti-spam
+  const [checkoutHoneypot, setCheckoutHoneypot] = useState('');
+  const [checkoutMountTime] = useState(() => Date.now());
+
   // Método de pago y cálculos interactivos
   const [metodoPago, setMetodoPago] = useState<MetodoPagoCheckout>('YAPE');
   const [billeteEfectivo, setBilleteEfectivo] = useState<number | 'exacto'>('exacto');
@@ -189,6 +193,16 @@ export default function CheckoutPage() {
 
   const handleConfirmarYEmitirPedido = async () => {
     setErrorPedido(null);
+
+    // Protección anti-spam
+    if (checkoutHoneypot) {
+      console.warn('Bot checkout blocked via honeypot.');
+      return;
+    }
+    if (Date.now() - checkoutMountTime < 1800) {
+      console.warn('Checkout submission too fast, suspected bot.');
+      return;
+    }
 
     // Validar nombre
     if (!nombre || nombre.trim().length < 3) {
@@ -517,6 +531,20 @@ export default function CheckoutPage() {
                   </h2>
                 </div>
                 <span className="text-[10px] text-zinc-400 font-mono">Para rotular tu paquete</span>
+              </div>
+
+              {/* Campo invisible Honeypot anti-spam */}
+              <div style={{ display: 'none', position: 'absolute', left: '-9999px' }} aria-hidden="true">
+                <label htmlFor="checkout_botcheck">No completar este campo:</label>
+                <input
+                  type="text"
+                  id="checkout_botcheck"
+                  name="checkout_botcheck"
+                  tabIndex={-1}
+                  autoComplete="off"
+                  value={checkoutHoneypot}
+                  onChange={(e) => setCheckoutHoneypot(e.target.value)}
+                />
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">

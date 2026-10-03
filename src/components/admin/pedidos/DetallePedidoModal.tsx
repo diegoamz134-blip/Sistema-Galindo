@@ -53,6 +53,8 @@ interface DetallePedidoModalProps {
   onClose: () => void;
   onPedidoActualizado: () => void;
   initialTab?: 'DETALLE' | 'WHATSAPP' | 'ACADEMIA';
+  onEditarClick?: (pedido: PedidoCompleto) => void;
+  onAnularClick?: (pedido: PedidoCompleto) => void;
 }
 
 export function DetallePedidoModal({
@@ -61,6 +63,8 @@ export function DetallePedidoModal({
   onClose,
   onPedidoActualizado,
   initialTab = 'DETALLE',
+  onEditarClick,
+  onAnularClick,
 }: DetallePedidoModalProps) {
   // Pestañas activas: DETALLE | WHATSAPP | ACADEMIA
   const [activeTab, setActiveTab] = useState<'DETALLE' | 'WHATSAPP' | 'ACADEMIA'>('DETALLE');
@@ -103,7 +107,7 @@ export function DetallePedidoModal({
   const [formSede, setFormSede] = useState('Sede Ica');
   const [formTurno, setFormTurno] = useState<'MANANA' | 'TARDE' | 'NOCHE' | 'SABATINO'>('MANANA');
   const [formFechaInicio, setFormFechaInicio] = useState('');
-  const [formTotalCurso, setFormTotalCurso] = useState(800);
+  const [formCostoMensualidad, setFormCostoMensualidad] = useState(800);
   const [formMontoPagado, setFormMontoPagado] = useState(150);
   const [formNumeroCuotas, setFormNumeroCuotas] = useState(2);
   const [formNotas, setFormNotas] = useState('');
@@ -186,16 +190,7 @@ export function DetallePedidoModal({
         it.nombre_producto.toLowerCase().includes('matricula') ||
         it.nombre_producto.toLowerCase().includes('barber')
     );
-    if (itemCurso) {
-      setFormCursoNombre(itemCurso.nombre_producto);
-      setFormCursoId(itemCurso.producto_id || 'curso-general');
-      if (itemCurso.subtotal > 200) {
-        setFormTotalCurso(itemCurso.subtotal);
-      }
-    } else {
-      setFormCursoNombre('Carrera Integral de Barbería Profesional');
-      setFormCursoId('carrera-integral');
-    }
+    // El parseo del curso y turno se hará una vez que carguen los cursos desde la base de datos
 
     // Fecha sugerida: próximo lunes o dentro de 5 días
     const sugerida = new Date();
@@ -216,6 +211,45 @@ export function DetallePedidoModal({
         ]);
 
         setCursosDisponibles(cursos);
+
+        // --- PARSEO INTELIGENTE DEL CURSO Y TURNO DEL CARRITO ---
+        if (itemCurso) {
+          const matchedCurso = cursos.find(c => 
+            itemCurso.nombre_producto.toLowerCase().includes(c.titulo.toLowerCase()) || 
+            (itemCurso.producto_id && itemCurso.producto_id.includes(c.id))
+          );
+          
+          if (matchedCurso) {
+            setFormCursoId(matchedCurso.id);
+            setFormCursoNombre(matchedCurso.titulo);
+            
+            if (matchedCurso.costo_mensualidad) {
+               setFormCostoMensualidad(matchedCurso.costo_mensualidad);
+            } else if (itemCurso.subtotal > 200) {
+               setFormCostoMensualidad(itemCurso.subtotal);
+            } else {
+               setFormCostoMensualidad(350);
+            }
+            
+            if (matchedCurso.duracion_semanas) {
+               setFormNumeroCuotas(Math.max(1, Math.round(matchedCurso.duracion_semanas / 4)));
+            }            // Extraer turno del nombre del producto guardado en el carrito
+            const nombreMin = itemCurso.nombre_producto.toLowerCase();
+            if (nombreMin.includes('mañana') || nombreMin.includes('manana')) setFormTurno('MANANA');
+            else if (nombreMin.includes('tarde')) setFormTurno('TARDE');
+            else if (nombreMin.includes('noche')) setFormTurno('NOCHE');
+            else if (nombreMin.includes('sabatino') || nombreMin.includes('sábado') || nombreMin.includes('sabado')) setFormTurno('SABATINO');
+            
+          } else {
+            setFormCursoNombre(itemCurso.nombre_producto);
+            setFormCursoId(itemCurso.producto_id || 'curso-general');
+            if (itemCurso.subtotal > 200) setFormCostoMensualidad(itemCurso.subtotal);
+          }
+        } else {
+          setFormCursoNombre('Carrera Integral de Barbería Profesional');
+          setFormCursoId('carrera-integral');
+        }
+
         if (alumno) {
           setAlumnoExistente(alumno);
           const dniLimpio = alumno.dni && !alumno.dni.startsWith('DNI-') ? alumno.dni : dniInicialLimpio;
@@ -401,12 +435,9 @@ export function DetallePedidoModal({
         turno: formTurno,
         fecha_inicio: formFechaInicio || undefined,
         monto_matricula_pagado: Number(formMontoPagado) || 0,
-        total_curso: Number(formTotalCurso) || 800,
+        total_curso: formNumeroCuotas > 0 ? Number(formCostoMensualidad) * Number(formNumeroCuotas) : Number(formCostoMensualidad),
         numero_cuotas: Number(formNumeroCuotas) || 0,
-        monto_por_cuota:
-          formNumeroCuotas > 0
-            ? Math.max(0, Math.round((Number(formTotalCurso) - Number(formMontoPagado)) / Number(formNumeroCuotas)))
-            : 0,
+        monto_por_cuota: formNumeroCuotas > 0 ? Number(formCostoMensualidad) : 0,
         metodo_pago: pedido.metodo_pago || 'EFECTIVO',
         notas: formNotas || `Formalizado desde Pedido Web ${pedido.codigo_pedido}`,
       };
@@ -482,8 +513,10 @@ export function DetallePedidoModal({
     CANCELADO: 'bg-rose-50 text-rose-800 border-rose-300',
   }[pedido.estado];
 
-  // Cálculo de saldo restante en el formulario
-  const saldoRestanteCalculado = Math.max(0, Number(formTotalCurso) - Number(formMontoPagado));
+  // Cálculo de saldo restante en el formulario (mensualidad x cuotas)
+  const saldoRestanteCalculado = formNumeroCuotas > 0 
+    ? Number(formCostoMensualidad) * Number(formNumeroCuotas)
+    : Number(formCostoMensualidad);
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto flex items-center justify-center p-2 sm:p-4">
@@ -639,6 +672,29 @@ export function DetallePedidoModal({
           {/* ========================================================================= */}
           {activeTab === 'DETALLE' && (
             <div className="space-y-5">
+              {/* BANNER SI ESTÁ ANULADA */}
+              {pedido.estado === 'CANCELADO' && (
+                <div className="p-4 rounded-2xl bg-rose-50 border border-rose-300 text-rose-950 space-y-2 shadow-2xs">
+                  <div className="flex items-center gap-2">
+                    <span className="px-2.5 py-0.5 rounded-full bg-rose-600 text-white font-mono text-[10px] font-black uppercase tracking-wider">
+                      Venta Anulada
+                    </span>
+                    <span className="font-bold text-xs text-rose-900">
+                      Esta transacción fue anulada y revertida en el sistema
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-rose-800 leading-relaxed">
+                    Las unidades de los productos fueron devueltas automáticamente al inventario Kardex de la sede{' '}
+                    <strong>{pedido.sede_nombre}</strong> y el importe fue descontado de las métricas de ingresos.
+                  </p>
+                  {pedido.notas && pedido.notas.includes('[ANULADA') && (
+                    <div className="p-2.5 bg-white/90 rounded-xl border border-rose-200 font-mono text-[11px] text-rose-900 leading-relaxed">
+                      {pedido.notas.substring(pedido.notas.indexOf('[ANULADA'))}
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* 1. DATOS DEL CLIENTE Y CONTACTO */}
               <div className="p-4 rounded-2xl bg-zinc-50 border border-zinc-200 space-y-3">
                 <div className="flex items-center justify-between">
@@ -1424,17 +1480,22 @@ export function DetallePedidoModal({
                             if (encontrado) {
                               setFormCursoNombre(encontrado.titulo);
                               if (encontrado.costo_total_contado) {
-                                setFormTotalCurso(encontrado.costo_total_contado);
+                                setFormCostoMensualidad(encontrado.costo_total_contado);
                               }
                             }
                           }}
                           className="w-full px-3 py-2 rounded-xl border border-zinc-200 bg-white text-xs font-bold text-zinc-900 focus:border-black outline-none"
                         >
                           <option value="curso-general">{formCursoNombre || 'Carrera Integral de Barbería'}</option>
-                          {cursosDisponibles.map((curso) => (
-                            <option key={curso.id} value={curso.id}>
-                              {curso.titulo} {curso.costo_total_contado ? `— S/ ${curso.costo_total_contado}` : ''}
-                            </option>
+                          {cursosDisponibles
+                            .filter(c => {
+                               const sedeFiltro = formSede.toLowerCase().includes('huancayo') ? 'huancayo' : 'ica';
+                               return !c.sede || c.sede === sedeFiltro || c.sede === 'ambas' || c.sede === 'todas';
+                            })
+                            .map((curso) => (
+                              <option key={curso.id} value={curso.id}>
+                                {curso.titulo} {curso.costo_total_contado ? `— S/ ${curso.costo_total_contado}` : ''}
+                              </option>
                           ))}
                         </select>
                       </div>
@@ -1483,12 +1544,12 @@ export function DetallePedidoModal({
 
                       <div>
                         <label className="text-[10px] font-bold text-zinc-500 block mb-1">
-                          Total Costo del Curso (S/)
+                          Costo Mensualidad (S/)
                         </label>
                         <input
                           type="number"
-                          value={formTotalCurso}
-                          onChange={(e) => setFormTotalCurso(Number(e.target.value))}
+                          value={formCostoMensualidad}
+                          onChange={(e) => setFormCostoMensualidad(Number(e.target.value))}
                           className="w-full px-3 py-2 rounded-xl border border-zinc-200 bg-white text-xs font-mono font-bold focus:border-black outline-none"
                         />
                       </div>
@@ -1528,8 +1589,11 @@ export function DetallePedidoModal({
                         >
                           <option value={0}>0 (Pago total al contado)</option>
                           <option value={1}>1 Cuota (a los 30 días)</option>
-                          <option value={2}>2 Cuotas mensuales</option>
-                          <option value={3}>3 Cuotas mensuales</option>
+                          {[2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((n) => (
+                            <option key={n} value={n}>
+                              {n} Cuotas mensuales
+                            </option>
+                          ))}
                         </select>
                       </div>
                     </div>
@@ -1578,14 +1642,42 @@ export function DetallePedidoModal({
 
         {/* PIE DEL MODAL (ACCIONES GLOBALES) */}
         <div className="p-4 sm:p-5 border-t border-zinc-200 bg-zinc-50 flex flex-wrap items-center justify-between gap-3">
-          <button
-            type="button"
-            onClick={handleEliminar}
-            className="px-3.5 py-2 rounded-xl text-xs font-bold text-rose-600 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 flex items-center gap-1.5 transition-colors cursor-pointer"
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-            <span>Eliminar Pedido</span>
-          </button>
+          <div className="flex items-center gap-2">
+            {pedido.estado === 'CANCELADO' ? (
+              <span className="px-3 py-2 rounded-xl text-xs font-bold text-rose-700 bg-rose-100/80 border border-rose-200 flex items-center gap-1.5 shadow-2xs">
+                <AlertTriangle className="w-3.5 h-3.5 text-rose-600" />
+                <span>Ticket Anulado (Stock Reingresado)</span>
+              </span>
+            ) : (
+              <button
+                type="button"
+                onClick={() => {
+                  if (onAnularClick) {
+                    onAnularClick(pedido);
+                  } else {
+                    handleEliminar();
+                  }
+                }}
+                className="px-3.5 py-2 rounded-xl text-xs font-bold text-rose-600 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 flex items-center gap-1.5 transition-colors cursor-pointer active:scale-95 shadow-2xs"
+                title="Anular venta y reingresar productos al Kardex"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                <span>Anular Venta</span>
+              </button>
+            )}
+
+            {onEditarClick && (
+              <button
+                type="button"
+                onClick={() => onEditarClick(pedido)}
+                className="px-3.5 py-2 rounded-xl text-xs font-bold text-zinc-700 hover:text-black bg-white hover:bg-zinc-100 border border-zinc-200 flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs active:scale-95"
+                title="Editar cliente, teléfono, método de pago o notas"
+              >
+                <Edit3 className="w-3.5 h-3.5 text-zinc-600" />
+                <span>Editar Venta</span>
+              </button>
+            )}
+          </div>
 
           <div className="flex items-center gap-2">
             <a
@@ -1599,7 +1691,7 @@ export function DetallePedidoModal({
               <ExternalLink className="w-3 h-3 text-zinc-400" />
             </a>
 
-            {pedido.estado !== 'ENTREGADO' && (
+            {pedido.estado !== 'ENTREGADO' && pedido.estado !== 'CANCELADO' && (
               <button
                 type="button"
                 onClick={() => handleCambiarEstado('ENTREGADO')}

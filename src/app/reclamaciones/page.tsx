@@ -34,8 +34,23 @@ export default function LibroReclamacionesPage() {
   const [detalle, setDetalle] = useState('');
   const [pedido, setPedido] = useState('');
 
+  // Protección anti-spam
+  const [honeypot, setHoneypot] = useState('');
+  const [loadTimestamp] = useState(() => Date.now());
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Bloqueo silencioso de bots automáticos
+    if (honeypot) {
+      console.warn('Bot submission blocked via honeypot.');
+      return;
+    }
+    if (Date.now() - loadTimestamp < 1500) {
+      console.warn('Submission too fast, suspected automated bot.');
+      return;
+    }
+
     if (!nombre.trim() || !numeroDoc.trim() || !telefono.trim() || !detalle.trim()) {
       alert('Por favor completa todos los campos obligatorios marcados con asterisco (*).');
       return;
@@ -160,7 +175,20 @@ export default function LibroReclamacionesPage() {
             </div>
           ) : (
             <form onSubmit={handleSubmit} className="bg-white p-6 sm:p-10 rounded-2xl border border-zinc-200 shadow-xs space-y-8">
-              
+              {/* Campo Honeypot Anti-Spam (oculto para usuarios reales, interceptor de bots) */}
+              <div style={{ display: 'none', position: 'absolute', left: '-9999px' }} aria-hidden="true">
+                <label htmlFor="confirm_website_botcheck">Por favor deja este campo en blanco:</label>
+                <input
+                  type="text"
+                  id="confirm_website_botcheck"
+                  name="confirm_website_botcheck"
+                  tabIndex={-1}
+                  autoComplete="off"
+                  value={honeypot}
+                  onChange={(e) => setHoneypot(e.target.value)}
+                />
+              </div>
+
               {/* Sección 1: Tipo de Disconformidad */}
               <div className="space-y-4">
                 <h2 className="text-xs font-bold text-zinc-950 uppercase tracking-wider border-b border-zinc-200 pb-2">

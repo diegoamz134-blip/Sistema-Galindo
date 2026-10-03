@@ -70,7 +70,8 @@ export default function TiendaPage() {
   const [isLoadingMore, setIsLoadingMore] = useState<boolean>(false);
 
   const [categoriaSeleccionada, setCategoriaSeleccionada] = useState<string>('todas');
-  const [marcaSeleccionada, setMarcaSeleccionada] = useState<string>('todas');
+  const [precioMin, setPrecioMin] = useState<string>('');
+  const [precioMax, setPrecioMax] = useState<string>('');
   const [busqueda, setBusqueda] = useState<string>('');
   const [debouncedBusqueda, setDebouncedBusqueda] = useState<string>('');
 
@@ -257,7 +258,8 @@ export default function TiendaPage() {
   const fetchProductsBatch = async (
     pageNum: number,
     cat: string,
-    marca: string,
+    min: string,
+    max: string,
     queryText: string,
     isAppend: boolean = false
   ) => {
@@ -287,9 +289,12 @@ export default function TiendaPage() {
         query = query.eq('categoria_id', cat);
       }
 
-      // Filtro por Marca
-      if (marca !== 'todas') {
-        query = query.or(`nombre.ilike.%${marca}%,sku.ilike.%${marca}%`);
+      // Filtro por Precio
+      if (min && !isNaN(Number(min))) {
+        query = query.gte('precio_venta', Number(min));
+      }
+      if (max && !isNaN(Number(max))) {
+        query = query.lte('precio_venta', Number(max));
       }
 
       // Buscador inteligente con sinónimos (solo filtra si tiene >= 2 caracteres)
@@ -334,16 +339,16 @@ export default function TiendaPage() {
     }
   };
 
-  // 3. Efecto al cambiar de categoría, marca, texto de búsqueda o sede seleccionada
+  // 3. Efecto al cambiar de categoría, precio, texto de búsqueda o sede seleccionada
   useEffect(() => {
     setPage(0);
-    fetchProductsBatch(0, categoriaSeleccionada, marcaSeleccionada, debouncedBusqueda, false);
-  }, [categoriaSeleccionada, marcaSeleccionada, debouncedBusqueda, sedeSeleccionada]);
+    fetchProductsBatch(0, categoriaSeleccionada, precioMin, precioMax, debouncedBusqueda, false);
+  }, [categoriaSeleccionada, precioMin, precioMax, debouncedBusqueda, sedeSeleccionada]);
 
   // Manejador del botón "Cargar más productos"
   const handleCargarMas = () => {
     if (isLoadingMore || productos.length >= totalProductos) return;
-    fetchProductsBatch(page + 1, categoriaSeleccionada, marcaSeleccionada, debouncedBusqueda, true);
+    fetchProductsBatch(page + 1, categoriaSeleccionada, precioMin, precioMax, debouncedBusqueda, true);
   };
 
   const hasMore = productos.length < totalProductos;
@@ -353,14 +358,16 @@ export default function TiendaPage() {
 
   const hayFiltrosActivos =
     categoriaSeleccionada !== 'todas' ||
-    marcaSeleccionada !== 'todas' ||
+    precioMin !== '' ||
+    precioMax !== '' ||
     debouncedBusqueda.length >= 2;
 
   const handleLimpiarFiltros = () => {
     setBusqueda('');
     setDebouncedBusqueda('');
     setCategoriaSeleccionada('todas');
-    setMarcaSeleccionada('todas');
+    setPrecioMin('');
+    setPrecioMax('');
     setIsDropdownOpen(false);
   };
 
@@ -468,38 +475,43 @@ export default function TiendaPage() {
               </div>
             </div>
 
-            {/* 2. Filtro rápido por Marca */}
-            <div className="p-5 rounded-2xl bg-white border border-zinc-200 shadow-xs space-y-3">
+            {/* 2. Filtro por Precio */}
+            <div className="p-5 rounded-2xl bg-white border border-zinc-200 shadow-xs space-y-4">
               <span className="text-[11px] font-mono uppercase tracking-wider text-zinc-400 px-1 block font-semibold">
-                Marcas Oficiales
+                Rango de Precio
               </span>
-              <div className="flex flex-wrap gap-1.5">
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  placeholder="Mín (S/)"
+                  value={precioMin}
+                  onChange={(e) => setPrecioMin(e.target.value)}
+                  className="w-full px-3 py-2 text-xs border border-zinc-200 rounded-xl focus:border-black focus:ring-1 focus:ring-black outline-none transition-all placeholder:text-zinc-400 font-mono"
+                  min="0"
+                />
+                <span className="text-zinc-300">-</span>
+                <input
+                  type="number"
+                  placeholder="Máx (S/)"
+                  value={precioMax}
+                  onChange={(e) => setPrecioMax(e.target.value)}
+                  className="w-full px-3 py-2 text-xs border border-zinc-200 rounded-xl focus:border-black focus:ring-1 focus:ring-black outline-none transition-all placeholder:text-zinc-400 font-mono"
+                  min="0"
+                />
+              </div>
+              
+              {(precioMin || precioMax) && (
                 <button
                   type="button"
-                  onClick={() => setMarcaSeleccionada('todas')}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-mono transition-colors cursor-pointer ${
-                    marcaSeleccionada === 'todas'
-                      ? 'bg-black text-white font-bold'
-                      : 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200'
-                  }`}
+                  onClick={() => {
+                    setPrecioMin('');
+                    setPrecioMax('');
+                  }}
+                  className="w-full py-2 bg-zinc-100 hover:bg-zinc-200 text-zinc-600 text-[11px] font-bold rounded-lg transition-colors cursor-pointer uppercase tracking-wider"
                 >
-                  Todas
+                  Borrar Filtro
                 </button>
-                {marcas.map((marca) => (
-                  <button
-                    key={marca}
-                    type="button"
-                    onClick={() => setMarcaSeleccionada(marca)}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-mono transition-colors cursor-pointer ${
-                      marcaSeleccionada === marca
-                        ? 'bg-black text-white font-bold'
-                        : 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200'
-                    }`}
-                  >
-                    {marca}
-                  </button>
-                ))}
-              </div>
+              )}
             </div>
 
           </aside>
@@ -697,12 +709,15 @@ export default function TiendaPage() {
                   </span>
                 )}
 
-                {marcaSeleccionada !== 'todas' && (
+                {(precioMin || precioMax) && (
                   <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-white border border-zinc-300 text-xs font-medium text-zinc-800 shadow-2xs">
-                    Marca: {marcaSeleccionada}
+                    Precio: {precioMin ? `S/ ${precioMin}` : 'S/ 0'} - {precioMax ? `S/ ${precioMax}` : 'Max'}
                     <button
                       type="button"
-                      onClick={() => setMarcaSeleccionada('todas')}
+                      onClick={() => {
+                        setPrecioMin('');
+                        setPrecioMax('');
+                      }}
                       className="text-zinc-400 hover:text-black cursor-pointer ml-1"
                     >
                       <X className="w-3 h-3" />
@@ -881,13 +896,6 @@ export default function TiendaPage() {
                                   <span className="px-2 py-0.5 rounded bg-zinc-950/90 text-amber-300 text-[10px] font-mono shadow-sm flex items-center gap-1 border border-amber-400/30">
                                     <AlertTriangle className="w-2.5 h-2.5 text-amber-400" />
                                     Agotado en {sedeActual.ciudad}
-                                  </span>
-                                );
-                              }
-                              if (stockEnSede <= prod.stock_minimo) {
-                                return (
-                                  <span className="px-2 py-0.5 rounded bg-zinc-900/90 text-white text-[10px] font-mono">
-                                    Últimas {stockEnSede} un. en {sedeActual.ciudad}
                                   </span>
                                 );
                               }

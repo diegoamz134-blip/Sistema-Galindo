@@ -5,7 +5,7 @@
 import { supabase } from '@/lib/supabase';
 import { SEDES, SedeId, BUSINESS_INFO } from '@/lib/constants';
 import { formatCurrency } from '@/lib/utils';
-import { crearMatriculaCompleta } from '@/lib/academia-service';
+import { crearMatriculaCompleta, matchSede } from '@/lib/academia-service';
 import { Alumno, Matricula } from '@/types/database';
 
 export interface PedidoItemDetallado {
@@ -26,6 +26,7 @@ export interface PedidoCompleto {
   cliente_telefono: string;
   cliente_dni?: string;
   ciudad?: string;
+  sede_id?: string;
   metodo_entrega?: string;
   metodo_pago: string;
   estado: 'PENDIENTE' | 'PAGADO' | 'ENTREGADO' | 'CANCELADO';
@@ -38,7 +39,6 @@ export interface PedidoCompleto {
   creado_en: string;
   actualizado_en?: string;
   items: PedidoItemDetallado[];
-  // Datos inferidos
   tipo_canal: 'WEB_TIENDA' | 'ACADEMIA' | 'POS_MOSTRADOR';
   sede_nombre: string;
 }
@@ -67,20 +67,17 @@ function inferirCanalYSede(row: any, items: PedidoItemDetallado[] = []): { canal
   const codigo = (row.codigo_pedido || '').toUpperCase();
   const notas = (row.notas || '').toLowerCase();
   const ciudad = (row.ciudad || '').toLowerCase();
+  const rowSede = (row.sede_id || row.sede || '').toLowerCase();
 
-  // Sede — primero respetar sede_id si existe en la fila
   let sedeId: 'ica' | 'huancayo' = 'ica';
   let sede = SEDES.ica.nombre;
 
-  if (row.sede_id === 'huancayo') {
+  if (rowSede.includes('huancayo') || ciudad.includes('huancayo') || notas.includes('huancayo')) {
     sedeId = 'huancayo';
     sede = SEDES.huancayo.nombre;
-  } else if (row.sede_id === 'ica') {
+  } else {
     sedeId = 'ica';
     sede = SEDES.ica.nombre;
-  } else if (ciudad.includes('huancayo') || notas.includes('huancayo')) {
-    sedeId = 'huancayo';
-    sede = SEDES.huancayo.nombre;
   }
 
   // Canal
@@ -95,7 +92,7 @@ function inferirCanalYSede(row: any, items: PedidoItemDetallado[] = []): { canal
 
   let canal: 'WEB_TIENDA' | 'ACADEMIA' | 'POS_MOSTRADOR' = 'WEB_TIENDA';
 
-  if (codigo.startsWith('POS-')) {
+  if (codigo.startsWith('POS-') || notas.includes('mostrador') || notas.includes('pos')) {
     canal = 'POS_MOSTRADOR';
   } else if (tieneMatricula) {
     canal = 'ACADEMIA';
@@ -159,15 +156,16 @@ export async function getPedidosAdmin(filtros?: FiltrosPedidosAdmin): Promise<Pe
     // Mapear y enriquecer
     let resultado: PedidoCompleto[] = pedidosRows.map((row) => {
       const items = itemsMap[row.id] || [];
-      const { canal, sede } = inferirCanalYSede(row, items);
+      const { canal, sede, sedeId } = inferirCanalYSede(row, items);
 
       return {
         id: row.id,
         codigo_pedido: row.codigo_pedido,
-        cliente_nombre: row.cliente_nombre || 'Cliente Web',
+        cliente_nombre: row.cliente_nombre || 'Cliente Mostrador',
         cliente_telefono: row.cliente_telefono || '',
         cliente_dni: row.cliente_dni || '',
         ciudad: row.ciudad || '',
+        sede_id: sedeId,
         metodo_entrega: row.metodo_entrega || 'RECOJO_SEDE',
         metodo_pago: row.metodo_pago || 'EFECTIVO',
         estado: row.estado || 'PENDIENTE',
@@ -190,12 +188,9 @@ export async function getPedidosAdmin(filtros?: FiltrosPedidosAdmin): Promise<Pe
       resultado = resultado.filter((p) => p.tipo_canal === filtros.canal);
     }
 
-    // Filtro de sede: comparar por sedeId inferido
+    // Filtro de sede estricto
     if (filtros?.sede && filtros.sede !== 'TODAS') {
-      const sedeFiltro = filtros.sede.toLowerCase(); // 'ica' o 'huancayo'
-      resultado = resultado.filter((p) =>
-        p.sede_nombre.toLowerCase().includes(sedeFiltro)
-      );
+      resultado = resultado.filter((p) => matchSede(p.sede_id || p.sede_nombre || p.ciudad || p.notas, filtros.sede));
     }
 
     if (filtros?.fecha && filtros.fecha !== 'TODAS') {
@@ -233,8 +228,7 @@ export async function getPedidosAdmin(filtros?: FiltrosPedidosAdmin): Promise<Pe
  */
 export async function getEstadisticasPedidos(sedeId?: string): Promise<EstadisticasPedidos> {
   try {
-    // Pasar el filtro de sede para que las stats sean consistentes con la lista
-    const filtros = sedeId ? { sede: sedeId === 'ica' ? 'Ica' : 'Huancayo' } as FiltrosPedidosAdmin : undefined;
+    const filtros = sedeId ? ({ sede: sedeId } as FiltrosPedidosAdmin) : undefined;
     const pedidos = await getPedidosAdmin(filtros);
     const pendientes = pedidos.filter((p) => p.estado === 'PENDIENTE').length;
     const entregados = pedidos.filter((p) => p.estado === 'ENTREGADO').length;
@@ -271,7 +265,6 @@ export async function getEstadisticasPedidos(sedeId?: string): Promise<Estadisti
   }
 }
 
-
 /**
  * Actualizar el estado de un pedido en Supabase
  */
@@ -302,7 +295,173 @@ export async function actualizarEstadoPedido(
 }
 
 /**
- * Eliminar o anular un pedido definitivamente
+ * Anular venta formalmente con reposición de inventario (Kardex) y auditoría
+ */
+export async function anularPedidoConKardex(
+  pedidoId: string,
+  responsable: string,
+  motivo: string
+): Promise<{ ok: boolean; error?: string }> {
+  try {
+    // 1. Obtener pedido y sus ítems
+    const { data: pedido, error: pedErr } = await supabase
+      .from('pedidos')
+      .select('id, codigo_pedido, total, notas, sede_id, ciudad, estado, metodo_pago')
+      .eq('id', pedidoId)
+      .single();
+
+    if (pedErr || !pedido) throw new Error('Pedido no encontrado en la base de datos.');
+    if (pedido.estado === 'CANCELADO') throw new Error('Este pedido ya se encuentra anulado.');
+
+    const { data: items } = await supabase
+      .from('pedido_items')
+      .select('*')
+      .eq('pedido_id', pedidoId);
+
+    const esHuancayo = (pedido.sede_id || (pedido as any).sede || pedido.ciudad || pedido.notas || '').toLowerCase().includes('huancayo');
+    const sedeDestino: 'huancayo' | 'ica' = esHuancayo ? 'huancayo' : 'ica';
+
+    // 2. Reingresar stock al Kardex por cada producto devuelto
+    if (items && items.length > 0) {
+      for (const item of items) {
+        if (item.producto_id && !String(item.producto_id).startsWith('mock-')) {
+          const { data: prod } = await supabase
+            .from('productos')
+            .select('id, stock, stock_ica, stock_huancayo')
+            .eq('id', item.producto_id)
+            .single();
+
+          if (prod) {
+            const stockPrev = esHuancayo
+              ? Number(prod.stock_huancayo ?? prod.stock ?? 0)
+              : Number(prod.stock_ica ?? prod.stock ?? 0);
+            const cant = Number(item.cantidad || 1);
+            const nuevoStock = stockPrev + cant;
+
+            // Restaurar stock en el producto de la sede
+            if (esHuancayo) {
+              await supabase.from('productos').update({ stock_huancayo: nuevoStock }).eq('id', item.producto_id);
+            } else {
+              await supabase.from('productos').update({ stock_ica: nuevoStock }).eq('id', item.producto_id);
+            }
+
+            // Registrar movimiento de entrada en Kardex
+            await supabase.from('movimientos_inventario').insert({
+              producto_id: item.producto_id,
+              tipo: 'ENTRADA',
+              cantidad: cant,
+              stock_anterior: stockPrev,
+              stock_nuevo: nuevoStock,
+              sede: sedeDestino,
+              motivo: `Devolución por Anulación de Ticket #${pedido.codigo_pedido} (Autorizado por: ${responsable} - Motivo: ${motivo})`,
+              usuario_nombre: responsable,
+              referencia_id: pedido.codigo_pedido,
+            });
+          }
+        }
+      }
+    }
+
+    // 3. Registrar egreso / reversión en caja chica si hay caja abierta
+    try {
+      const { data: cajasAbiertas } = await supabase
+        .from('cajas_chicas')
+        .select('id, sede')
+        .eq('estado', 'ABIERTA');
+
+      const cajaSede = (cajasAbiertas || []).find((c: any) => matchSede(c.sede, sedeDestino));
+      if (cajaSede) {
+        await supabase.from('movimientos_caja').insert({
+          caja_id: cajaSede.id,
+          tipo: 'EGRESO',
+          monto: Number(pedido.total || 0),
+          metodo_pago: pedido.metodo_pago || 'EFECTIVO',
+          concepto: `Anulación de Ticket #${pedido.codigo_pedido} (Por: ${responsable} - Motivo: ${motivo})`,
+          referencia_id: pedido.codigo_pedido,
+          usuario_nombre: responsable,
+          fecha: new Date().toISOString(),
+        });
+      }
+    } catch {
+      // Ignorar si caja chica no está abierta
+    }
+
+    // 4. Cambiar estado a CANCELADO y registrar constancia de auditoría en notas
+    const fechaHora = new Date().toLocaleString('es-PE', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+    const notaAuditoria = `\n[ANULADA el ${fechaHora} por ${responsable}. Motivo: ${motivo}]`;
+    const notasActualizadas = ((pedido.notas || '') + notaAuditoria).trim();
+
+    const { error: updErr } = await supabase
+      .from('pedidos')
+      .update({
+        estado: 'CANCELADO',
+        notas: notasActualizadas,
+        actualizado_en: new Date().toISOString(),
+      })
+      .eq('id', pedidoId);
+
+    if (updErr) throw updErr;
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new Event('galindo_pedido_web_realizado'));
+    }
+
+    return { ok: true };
+  } catch (err: any) {
+    console.error('Error al anular venta con kardex:', err);
+    return { ok: false, error: err.message || 'Error al anular la venta.' };
+  }
+}
+
+/**
+ * Editar datos básicos de un pedido o venta (cliente, teléfono, DNI, método de pago, notas)
+ */
+export async function editarPedidoAdmin(
+  pedidoId: string,
+  datos: {
+    cliente_nombre?: string;
+    cliente_dni?: string;
+    cliente_telefono?: string;
+    metodo_pago?: string;
+    notas?: string;
+  }
+): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const payload: Record<string, any> = {
+      actualizado_en: new Date().toISOString(),
+    };
+    if (datos.cliente_nombre !== undefined) payload.cliente_nombre = datos.cliente_nombre.trim();
+    if (datos.cliente_dni !== undefined) payload.cliente_dni = datos.cliente_dni.trim();
+    if (datos.cliente_telefono !== undefined) payload.cliente_telefono = datos.cliente_telefono.trim();
+    if (datos.metodo_pago !== undefined) payload.metodo_pago = datos.metodo_pago;
+    if (datos.notas !== undefined) payload.notas = datos.notas;
+
+    const { error } = await supabase
+      .from('pedidos')
+      .update(payload)
+      .eq('id', pedidoId);
+
+    if (error) throw error;
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new Event('galindo_pedido_web_realizado'));
+    }
+
+    return { ok: true };
+  } catch (err: any) {
+    console.error('Error al editar venta:', err);
+    return { ok: false, error: err.message || 'Error al guardar cambios de la venta.' };
+  }
+}
+
+/**
+ * Eliminar un pedido definitivamente
  */
 export async function eliminarPedido(pedidoId: string): Promise<{ ok: boolean; error?: string }> {
   try {
