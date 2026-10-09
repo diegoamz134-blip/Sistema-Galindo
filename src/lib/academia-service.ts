@@ -1045,3 +1045,52 @@ export async function eliminarTodosLosCursos(): Promise<{ ok: boolean; error?: s
   }
 }
 
+/**
+ * Eliminar una matrícula completa, sus cuotas asociadas y el registro del alumno si no tiene más matrículas
+ */
+export async function eliminarMatriculaCompleta(
+  matriculaId: string,
+  alumnoId?: string
+): Promise<{ ok: boolean; error?: string }> {
+  try {
+    // 1. Eliminar cuotas vinculadas
+    const { error: errCuotas } = await supabase
+      .from('cuotas_matricula')
+      .delete()
+      .eq('matricula_id', matriculaId);
+
+    if (errCuotas) {
+      console.warn('Aviso al eliminar cuotas:', errCuotas.message);
+    }
+
+    // 2. Eliminar la matrícula
+    const { error: errMat } = await supabase
+      .from('matriculas')
+      .delete()
+      .eq('id', matriculaId);
+
+    if (errMat) throw new Error(errMat.message);
+
+    // 3. Si se especificó alumnoId, comprobar si tiene otras matrículas
+    if (alumnoId) {
+      const { data: otrasMats } = await supabase
+        .from('matriculas')
+        .select('id')
+        .eq('alumno_id', alumnoId);
+
+      if (!otrasMats || otrasMats.length === 0) {
+        await supabase
+          .from('alumnos')
+          .delete()
+          .eq('id', alumnoId);
+      }
+    }
+
+    return { ok: true };
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : 'Error al eliminar la matrícula';
+    console.error('Error al eliminar matricula:', msg);
+    return { ok: false, error: msg };
+  }
+}
+

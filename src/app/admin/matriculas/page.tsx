@@ -18,6 +18,7 @@ import {
   Sparkles,
   BookOpen,
   MapPin,
+  Trash2,
 } from 'lucide-react';
 import {
   getMatriculasConDetalle,
@@ -26,6 +27,7 @@ import {
   marcarCursoDestacado,
   eliminarCurso,
   eliminarTodosLosCursos,
+  eliminarMatriculaCompleta,
   calcularEstadisticas,
   toggleEntregaKit,
   matchSede,
@@ -75,6 +77,29 @@ export default function AdminMatriculasPage() {
   const [ticketParaImprimir, setTicketParaImprimir] = useState<MatriculaConDetalle | null>(null);
   const [showModalCurso, setShowModalCurso] = useState(false);
   const [cursoParaEditar, setCursoParaEditar] = useState<Curso | null>(null);
+  const [matriculaEliminando, setMatriculaEliminando] = useState<MatriculaConDetalle | null>(null);
+  const [isEliminandoMatricula, setIsEliminandoMatricula] = useState(false);
+
+  const handleConfirmarEliminarMatricula = async () => {
+    if (!matriculaEliminando) return;
+    setIsEliminandoMatricula(true);
+    try {
+      const res = await eliminarMatriculaCompleta(
+        matriculaEliminando.id,
+        matriculaEliminando.alumno_id || matriculaEliminando.alumno?.id
+      );
+      if (res.ok) {
+        setMatriculas((prev) => prev.filter((m) => m.id !== matriculaEliminando.id));
+        setMatriculaEliminando(null);
+      } else {
+        alert(res.error || 'No se pudo eliminar la matrícula');
+      }
+    } catch {
+      alert('Error inesperado al eliminar');
+    } finally {
+      setIsEliminandoMatricula(false);
+    }
+  };
 
   // Carga de datos
   const cargarDatos = useCallback(async (silencioso = false) => {
@@ -645,6 +670,19 @@ export default function AdminMatriculasPage() {
                           >
                             <Eye className="w-3.5 h-3.5" />
                           </button>
+
+                          {/* Botón Eliminar Alumno & Matrícula */}
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setMatriculaEliminando(m);
+                            }}
+                            className="p-1 rounded-lg text-zinc-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
+                            title="Eliminar Alumno y Matrícula"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
                         </div>
                       </td>
                     </tr>
@@ -753,6 +791,58 @@ export default function AdminMatriculasPage() {
           onClose={() => setTicketParaImprimir(null)}
           matricula={ticketParaImprimir}
         />
+      )}
+
+      {/* Modal: Confirmación Eliminar Alumno y Matrícula */}
+      {matriculaEliminando && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div
+            onClick={() => !isEliminandoMatricula && setMatriculaEliminando(null)}
+            className="fixed inset-0 bg-black/40 backdrop-blur-xs cursor-pointer"
+          />
+          <div className="relative w-full max-w-sm bg-white rounded-2xl p-6 shadow-2xl border border-zinc-200 z-10 space-y-4">
+            <div className="w-10 h-10 rounded-full bg-rose-50 border border-rose-200 text-rose-600 flex items-center justify-center mx-auto">
+              <Trash2 className="w-5 h-5" />
+            </div>
+
+            <div className="text-center space-y-1.5">
+              <h3 className="text-base font-semibold text-zinc-950">
+                ¿Eliminar alumno y matrícula?
+              </h3>
+              <p className="text-xs text-zinc-500 leading-relaxed">
+                ¿Estás seguro de que deseas eliminar la matrícula{' '}
+                <span className="font-semibold text-zinc-900">{matriculaEliminando.codigo_matricula}</span>{' '}
+                de{' '}
+                <span className="font-semibold text-zinc-900">
+                  {matriculaEliminando.alumno?.nombres} {matriculaEliminando.alumno?.apellidos}
+                </span>?
+              </p>
+              <p className="text-[11px] text-zinc-400">
+                Se borrarán sus cuotas de pago, expediente académico y el registro del estudiante.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2.5 pt-2">
+              <button
+                type="button"
+                onClick={() => setMatriculaEliminando(null)}
+                disabled={isEliminandoMatricula}
+                className="py-2 rounded-lg border border-zinc-200 text-xs font-semibold text-zinc-700 hover:bg-zinc-50 transition-colors cursor-pointer disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmarEliminarMatricula}
+                disabled={isEliminandoMatricula}
+                className="inline-flex items-center justify-center gap-1.5 py-2 rounded-lg bg-rose-600 hover:bg-rose-700 active:scale-98 text-white text-xs font-semibold transition-all cursor-pointer shadow-xs disabled:opacity-50"
+              >
+                {isEliminandoMatricula && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
+                <span>Eliminar</span>
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
     </div>
