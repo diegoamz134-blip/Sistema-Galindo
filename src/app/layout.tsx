@@ -116,7 +116,7 @@ export const metadata: Metadata = {
     images: ["/baner.webp"],
   },
   verification: {
-    google: process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION || "",
+    google: process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION || "google0057ec1f2f18a44c",
   },
   icons: {
     icon: [
