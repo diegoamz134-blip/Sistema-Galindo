@@ -4,6 +4,7 @@ import React, { createContext, useContext, useEffect, useState, useCallback } fr
 import { motion, AnimatePresence } from 'framer-motion';
 import { MapPin, RefreshCw } from 'lucide-react';
 import { SEDES, SedeId, SedeInfo, DEFAULT_SEDE_ID } from '@/lib/constants';
+import { useAuth } from '@/context/AuthContext';
 
 const STORAGE_KEY = 'galindo_sede_activa';
 
@@ -12,16 +13,23 @@ interface SedeContextType {
   sedeInfo: SedeInfo;
   setSede: (id: SedeId) => void;
   sedes: typeof SEDES;
+  puedeCambiarSede: boolean;
+  sedesDisponibles: SedeInfo[];
 }
 
 const SedeContext = createContext<SedeContextType | undefined>(undefined);
 
 export function SedeProvider({ children }: { children: React.ReactNode }) {
+  const { userMeta, isLoading: isAuthLoading } = useAuth();
   const [sedeActiva, setSedeActiva] = useState<SedeId>(DEFAULT_SEDE_ID);
   const [isChanging, setIsChanging] = useState(false);
   const [targetSede, setTargetSede] = useState<SedeId | null>(null);
 
-  // Cargar sede persistida al iniciar
+  const sedeAsignada = userMeta?.sede_asignada;
+  const esSuper = Boolean(userMeta?.es_superadmin);
+  const puedeCambiarSede = esSuper || !sedeAsignada || sedeAsignada === 'todas';
+
+  // 1. Cargar sede persistida al iniciar (para visitantes públicos o superadmins)
   useEffect(() => {
     try {
       const stored = localStorage.getItem(STORAGE_KEY) as SedeId | null;
@@ -31,8 +39,29 @@ export function SedeProvider({ children }: { children: React.ReactNode }) {
     } catch {}
   }, []);
 
+  // 2. REGLA ESTRICTA DE SEGURIDAD:
+  // Si el usuario tiene una sede asignada específica (ej. 'ica' o 'huancayo') y no es superadmin,
+  // forzar automáticamente y permanentemente su sede asignada.
+  useEffect(() => {
+    if (!isAuthLoading && !puedeCambiarSede && (sedeAsignada === 'ica' || sedeAsignada === 'huancayo')) {
+      if (sedeActiva !== sedeAsignada) {
+        setSedeActiva(sedeAsignada as SedeId);
+        try {
+          localStorage.setItem(STORAGE_KEY, sedeAsignada);
+        } catch {}
+        window.dispatchEvent(new CustomEvent('galindo_sede_changed', { detail: { sedeId: sedeAsignada } }));
+      }
+    }
+  }, [isAuthLoading, puedeCambiarSede, sedeAsignada, sedeActiva]);
+
   const setSede = useCallback((id: SedeId) => {
     if (id === sedeActiva) return;
+
+    // Bloquear si el usuario no tiene permiso de cambiar de sede
+    if (!puedeCambiarSede && (sedeAsignada === 'ica' || sedeAsignada === 'huancayo') && id !== sedeAsignada) {
+      console.warn('Acceso denegado: tu cuenta solo tiene acceso a Sede', sedeAsignada);
+      return;
+    }
     
     // Iniciar transición visual
     setTargetSede(id);
@@ -49,18 +78,31 @@ export function SedeProvider({ children }: { children: React.ReactNode }) {
       // Quitar overlay después de un tiempo para asegurar que todo se recargó debajo
       setTimeout(() => {
         setIsChanging(false);
-        setTimeout(() => setTargetSede(null), 300); // Limpiar después de animación de salida
+        setTimeout(() => setTargetSede(null), 300);
       }, 500); 
     }, 100);
-  }, [sedeActiva]);
+  }, [sedeActiva, puedeCambiarSede, sedeAsignada]);
+
+  const sedesDisponibles = puedeCambiarSede
+    ? Object.values(SEDES)
+    : sedeAsignada && (sedeAsignada === 'ica' || sedeAsignada === 'huancayo')
+    ? [SEDES[sedeAsignada as SedeId]]
+    : [SEDES[DEFAULT_SEDE_ID]];
+
+  // Sede blindada efectiva: Si el usuario no puede cambiar de sede, siempre devuelve su sede asignada
+  const sedeSegura: SedeId = (!puedeCambiarSede && (sedeAsignada === 'ica' || sedeAsignada === 'huancayo'))
+    ? (sedeAsignada as SedeId)
+    : sedeActiva;
 
   return (
     <SedeContext.Provider
       value={{
-        sedeActiva,
-        sedeInfo: SEDES[sedeActiva],
+        sedeActiva: sedeSegura,
+        sedeInfo: SEDES[sedeSegura] || SEDES[DEFAULT_SEDE_ID],
         setSede,
         sedes: SEDES,
+        puedeCambiarSede,
+        sedesDisponibles,
       }}
     >
       {children}
@@ -94,18 +136,9 @@ export function SedeProvider({ children }: { children: React.ReactNode }) {
               <p className="text-sm text-zinc-500 text-center leading-relaxed">
                 Preparando el entorno para <br/>
                 <span className="text-zinc-900 font-bold bg-zinc-100 px-2 py-0.5 rounded-md mt-1 inline-block">
-                  {SEDES[targetSede].nombre}
+                  {SEDES[targetSede]?.nombre || targetSede}
                 </span>
               </p>
-              
-              <div className="w-full h-1.5 bg-zinc-100 rounded-full mt-7 overflow-hidden relative">
-                <motion.div 
-                  initial={{ width: '0%', left: 0 }}
-                  animate={{ width: '100%' }}
-                  transition={{ duration: 0.6, ease: "easeInOut" }}
-                  className="absolute inset-y-0 left-0 bg-zinc-900 rounded-full"
-                />
-              </div>
             </motion.div>
           </motion.div>
         )}
@@ -117,7 +150,7 @@ export function SedeProvider({ children }: { children: React.ReactNode }) {
 export function useSede() {
   const context = useContext(SedeContext);
   if (!context) {
-    throw new Error('useSede debe ser utilizado dentro de un SedeProvider');
+    throw new Error('useSede debe usarse dentro de un SedeProvider');
   }
   return context;
 }

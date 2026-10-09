@@ -3,11 +3,17 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { User, Session, AuthError } from '@supabase/supabase-js';
 import { supabase, checkSupabaseConnection } from '@/lib/supabase';
+import { ModuloId, TODOS_LOS_MODULOS, PerfilUsuarioSistema, tienePermisoModulo } from '@/lib/permisos';
+import { obtenerPerfilPorEmail } from '@/lib/usuarios-service';
 
-interface AuthUserMeta {
+export interface AuthUserMeta {
   nombre?: string;
   role?: string;
   sede?: string;
+  sede_asignada: 'ica' | 'huancayo' | 'todas';
+  permisos: ModuloId[];
+  es_superadmin: boolean;
+  activo: boolean;
 }
 
 interface AuthContextType {
@@ -16,9 +22,12 @@ interface AuthContextType {
   isLoading: boolean;
   isVpsConnected: boolean | null;
   userMeta: AuthUserMeta;
+  perfilUsuario: PerfilUsuarioSistema | null;
   signIn: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
   signOut: () => Promise<void>;
   checkConnection: () => Promise<boolean>;
+  hasPermission: (moduloId: ModuloId) => boolean;
+  recargarPerfil: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -28,6 +37,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isVpsConnected, setIsVpsConnected] = useState<boolean | null>(null);
+  const [perfilUsuario, setPerfilUsuario] = useState<PerfilUsuarioSistema | null>(null);
+
+  // Recargar perfil de usuario desde base de datos / caché
+  const recargarPerfil = useCallback(async () => {
+    if (!user?.email) {
+      setPerfilUsuario(null);
+      return;
+    }
+    try {
+      const p = await obtenerPerfilPorEmail(user.email);
+      setPerfilUsuario(p);
+    } catch {
+      // Ignorar errores en segundo plano
+    }
+  }, [user?.email]);
+
+  useEffect(() => {
+    if (user?.email) {
+      recargarPerfil();
+    } else {
+      setPerfilUsuario(null);
+    }
+  }, [user?.email, recargarPerfil]);
 
   // Verificar la conectividad con el servidor Supabase
   const checkConnection = useCallback(async (): Promise<boolean> => {
@@ -147,6 +179,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setUser(null);
       setSession(null);
+      setPerfilUsuario(null);
       try {
         localStorage.removeItem('galindo_auth_user');
         localStorage.removeItem('galindo_demo_auth');
@@ -155,14 +188,55 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  // Metadatos calculados del usuario actual estrictamente desde Supabase
+  // Determinar permisos y rol superadmin
+  const emailNormalizado = (user?.email || '').toLowerCase().trim();
+  const isSuperAdmin =
+    emailNormalizado === 'admin@galindobarber.pe' ||
+    emailNormalizado === 'admin@galindo.com' ||
+    user?.user_metadata?.role?.toLowerCase() === 'superadmin' ||
+    Boolean(perfilUsuario?.es_superadmin);
+
+  const permisosActivos: ModuloId[] = isSuperAdmin
+    ? TODOS_LOS_MODULOS
+    : Array.isArray(perfilUsuario?.permisos) && perfilUsuario.permisos.length > 0
+    ? (perfilUsuario.permisos as ModuloId[])
+    : Array.isArray(user?.user_metadata?.permisos)
+    ? (user.user_metadata.permisos as ModuloId[])
+    : ['pos'];
+
+  // Determinar sede asignada de forma robusta
+  const rawSede =
+    perfilUsuario?.sede_asignada ||
+    user?.user_metadata?.sede_asignada ||
+    user?.user_metadata?.sede ||
+    'todas';
+
+  const sedeNormalizada = (
+    rawSede === 'huancayo' ? 'huancayo' : rawSede === 'ica' ? 'ica' : 'todas'
+  ) as 'ica' | 'huancayo' | 'todas';
+
+  // Metadatos calculados del usuario actual
   const userMeta: AuthUserMeta = {
     nombre:
+      perfilUsuario?.nombre_completo ||
       user?.user_metadata?.nombre ||
       user?.user_metadata?.full_name ||
       (user?.email ? user.email.split('@')[0] : 'Administrador'),
-    role: user?.user_metadata?.role || 'Administrador',
-    sede: user?.user_metadata?.sede || 'Sede Central Ica (Calle Bolívar)',
+    role: isSuperAdmin ? 'Superadmin' : perfilUsuario?.rol || user?.user_metadata?.role || 'Personal',
+    sede:
+      sedeNormalizada === 'huancayo'
+        ? 'Sede Huancayo'
+        : sedeNormalizada === 'ica'
+        ? 'Sede Ica'
+        : 'Todas las Sedes',
+    sede_asignada: isSuperAdmin ? 'todas' : sedeNormalizada,
+    permisos: permisosActivos,
+    es_superadmin: isSuperAdmin,
+    activo: perfilUsuario ? perfilUsuario.activo : true,
+  };
+
+  const hasPermission = (moduloId: ModuloId): boolean => {
+    return tienePermisoModulo(userMeta.permisos, moduloId, userMeta.es_superadmin);
   };
 
   return (
@@ -173,9 +247,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         isLoading,
         isVpsConnected,
         userMeta,
+        perfilUsuario,
         signIn,
         signOut,
         checkConnection,
+        hasPermission,
+        recargarPerfil,
       }}
     >
       {children}

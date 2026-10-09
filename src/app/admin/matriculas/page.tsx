@@ -17,6 +17,7 @@ import {
   GraduationCap,
   Sparkles,
   BookOpen,
+  MapPin,
 } from 'lucide-react';
 import {
   getMatriculasConDetalle,
@@ -45,7 +46,7 @@ import { CursoFormModal } from '@/components/admin/matriculas/CursoFormModal';
 import { useSede } from '@/context/SedeContext';
 
 export default function AdminMatriculasPage() {
-  const { sedeActiva, sedeInfo } = useSede();
+  const { sedeActiva, sedeInfo, puedeCambiarSede } = useSede();
   const [tabActiva, setTabActiva] = useState<'matriculas' | 'cursos'>('matriculas');
   const [matriculas, setMatriculas] = useState<MatriculaConDetalle[]>([]);
   const [cursos, setCursos] = useState<Curso[]>([]);
@@ -141,8 +142,8 @@ export default function AdminMatriculasPage() {
     };
   }, [cargarDatos]);
 
-  // Sede efectiva para la vista
-  const sedeEfectiva = filtroSede === 'SEDE_ACTIVA' ? sedeActiva : filtroSede;
+  // Sede efectiva para la vista (blindada según permisos del usuario)
+  const sedeEfectiva = !puedeCambiarSede ? sedeActiva : (filtroSede === 'SEDE_ACTIVA' ? sedeActiva : filtroSede);
 
   // Filtrado de cursos por Sede Activa (Global)
   const cursosFiltrados = useMemo(() => {
@@ -388,16 +389,23 @@ export default function AdminMatriculasPage() {
 
           {/* Filtro Sede */}
           <div className="md:col-span-2">
-            <select
-              value={filtroSede}
-              onChange={(e) => setFiltroSede(e.target.value)}
-              className="w-full px-3 py-2 rounded-xl bg-zinc-50 border border-zinc-200 text-zinc-900 text-xs font-semibold focus:border-black outline-none"
-            >
-              <option value="SEDE_ACTIVA">Sede {sedeInfo.ciudad} (Actual)</option>
-              <option value="ica">Sede Ica</option>
-              <option value="huancayo">Sede Huancayo</option>
-              <option value="TODAS">Todas las Sedes</option>
-            </select>
+            {puedeCambiarSede ? (
+              <select
+                value={filtroSede}
+                onChange={(e) => setFiltroSede(e.target.value)}
+                className="w-full px-3 py-2 rounded-xl bg-zinc-50 border border-zinc-200 text-zinc-900 text-xs font-semibold focus:border-black outline-none"
+              >
+                <option value="SEDE_ACTIVA">Sede {sedeInfo.ciudad} (Actual)</option>
+                <option value="ica">Sede Ica</option>
+                <option value="huancayo">Sede Huancayo</option>
+                <option value="TODAS">Todas las Sedes</option>
+              </select>
+            ) : (
+              <div className="w-full px-3 py-2 rounded-xl bg-zinc-100 border border-zinc-200 text-zinc-700 text-xs font-semibold flex items-center gap-2 select-none h-[38px]">
+                <MapPin className="w-3.5 h-3.5 text-zinc-500 shrink-0" />
+                <span className="truncate">Sede {sedeInfo.ciudad}</span>
+              </div>
+            )}
           </div>
 
           {/* Filtro Curso */}

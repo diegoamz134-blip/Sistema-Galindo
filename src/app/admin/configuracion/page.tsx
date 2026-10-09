@@ -15,6 +15,7 @@ import {
   ChevronRight
 } from 'lucide-react';
 import { SEDES } from '@/lib/constants';
+import { GestionUsuariosPanel } from '@/components/admin/configuracion/GestionUsuariosPanel';
 
 type TabType = 'NEGOCIO' | 'USUARIOS' | 'TICKETS';
 
@@ -193,76 +194,39 @@ export default function ConfiguracionPage() {
 
               {/* TAB: USUARIOS */}
               {activeTab === 'USUARIOS' && (
-                <div className="space-y-8">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h2 className="text-xl font-bold text-zinc-900">Gestión de Personal</h2>
-                      <p className="text-xs text-zinc-500 mt-1">Usuarios que tienen acceso al panel de administración.</p>
-                    </div>
-                    <button className="px-4 py-2 bg-zinc-900 text-white rounded-xl text-xs font-bold hover:bg-zinc-800 transition-colors">
-                      + Invitar Usuario
-                    </button>
-                  </div>
-
-                  <div className="border border-zinc-200 rounded-2xl overflow-hidden">
-                    <table className="w-full text-left text-sm">
-                      <thead className="bg-zinc-50 border-b border-zinc-200 text-xs font-bold text-zinc-500 uppercase tracking-wider">
-                        <tr>
-                          <th className="px-6 py-4">Usuario</th>
-                          <th className="px-6 py-4">Rol</th>
-                          <th className="px-6 py-4">Sede Asignada</th>
-                          <th className="px-6 py-4">Estado</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-zinc-100">
-                        <tr className="hover:bg-zinc-50/50">
-                          <td className="px-6 py-4">
-                            <p className="font-bold text-zinc-900">Diego Galindo</p>
-                            <p className="text-xs text-zinc-500">admin@galindo.com</p>
-                          </td>
-                          <td className="px-6 py-4"><span className="px-2.5 py-1 bg-purple-100 text-purple-700 rounded-md text-[10px] font-black tracking-widest uppercase">Admin</span></td>
-                          <td className="px-6 py-4 text-xs font-medium text-zinc-600">Global (Todas)</td>
-                          <td className="px-6 py-4">
-                            <span className="flex items-center gap-1.5 text-xs font-medium text-emerald-600">
-                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Activo
-                            </span>
-                          </td>
-                        </tr>
-                        {/* More mock users can go here */}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
+                <GestionUsuariosPanel />
               )}
 
-              {/* ACTION BAR (Save Button) */}
-              <div className="mt-10 pt-6 border-t border-zinc-100 flex items-center justify-end">
-                <AnimatePresence>
-                  {showSuccess && (
-                    <motion.div
-                      initial={{ opacity: 0, x: 20 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      exit={{ opacity: 0 }}
-                      className="flex items-center gap-2 text-emerald-600 mr-4"
-                    >
-                      <CheckCircle2 className="w-5 h-5" />
-                      <span className="text-sm font-bold">Cambios Guardados</span>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-                <button
-                  onClick={handleSave}
-                  disabled={isSaving}
-                  className="flex items-center gap-2 px-6 py-2.5 bg-zinc-950 text-white rounded-xl text-sm font-bold hover:bg-zinc-800 transition-colors disabled:opacity-50"
-                >
-                  {isSaving ? (
-                    <RefreshCw className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <Save className="w-4 h-4" />
-                  )}
-                  {isSaving ? 'Guardando...' : 'Guardar Preferencias'}
-                </button>
-              </div>
+              {/* ACTION BAR (Save Button para Mi Negocio y Tickets) */}
+              {activeTab !== 'USUARIOS' && (
+                <div className="mt-10 pt-6 border-t border-zinc-100 flex items-center justify-end">
+                  <AnimatePresence>
+                    {showSuccess && (
+                      <motion.div
+                        initial={{ opacity: 0, x: 20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        exit={{ opacity: 0 }}
+                        className="flex items-center gap-2 text-emerald-600 mr-4"
+                      >
+                        <CheckCircle2 className="w-5 h-5" />
+                        <span className="text-sm font-bold">Cambios Guardados</span>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                  <button
+                    onClick={handleSave}
+                    disabled={isSaving}
+                    className="flex items-center gap-2 px-6 py-2.5 bg-zinc-950 text-white rounded-xl text-sm font-bold hover:bg-zinc-800 transition-colors disabled:opacity-50 cursor-pointer"
+                  >
+                    {isSaving ? (
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Save className="w-4 h-4" />
+                    )}
+                    {isSaving ? 'Guardando...' : 'Guardar Preferencias'}
+                  </button>
+                </div>
+              )}
 
             </motion.div>
           </AnimatePresence>

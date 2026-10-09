@@ -3,15 +3,19 @@
 // SISTEMA GALINDO - ESCUELA DE BARBERÍA & E-COMMERCE
 // ==========================================
 
-export type UserRole = 'superadmin' | 'admin' | 'cajero' | 'docente' | 'alumno';
+export type UserRole = 'superadmin' | 'admin' | 'cajero' | 'docente' | 'alumno' | 'personal';
 
 export interface UserProfile {
   id: string;
+  auth_user_id?: string;
   email: string;
   nombre_completo: string;
   telefono?: string;
   rol: UserRole;
   avatar_url?: string;
+  permisos?: string[];
+  sede_asignada?: string;
+  es_superadmin?: boolean;
   creado_en: string;
   activo: boolean;
 }

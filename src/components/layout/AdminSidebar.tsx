@@ -27,34 +27,47 @@ import { useAuth } from '@/context/AuthContext';
 import { useSede } from '@/context/SedeContext';
 import { SedeId } from '@/lib/constants';
 import { supabase } from '@/lib/supabase';
+import { ModuloId } from '@/lib/permisos';
 
-const NAV_SECTIONS = [
+interface NavItemDef {
+  href: string;
+  label: string;
+  icon: React.ComponentType<{ className?: string }>;
+  moduloId: ModuloId;
+}
+
+interface NavSectionDef {
+  title: string;
+  items: NavItemDef[];
+}
+
+const NAV_SECTIONS: NavSectionDef[] = [
   {
     title: 'Principal',
     items: [
-      { href: '/admin', label: 'Dashboard', icon: LayoutDashboard },
+      { href: '/admin', label: 'Dashboard', icon: LayoutDashboard, moduloId: 'dashboard' },
     ]
   },
   {
     title: 'Gestión Operativa',
     items: [
-      { href: '/admin/pos', label: 'Punto de Venta (POS)', icon: Store },
-      { href: '/admin/pedidos', label: 'Pedidos Web & Ventas', icon: ShoppingBag },
-      { href: '/admin/productos', label: 'Productos & Tienda', icon: Package },
-      { href: '/admin/inventario', label: 'Inventario (Kardex)', icon: Boxes },
-      { href: '/admin/matriculas', label: 'Academia & Matrículas', icon: GraduationCap },
+      { href: '/admin/pos', label: 'Punto de Venta (POS)', icon: Store, moduloId: 'pos' },
+      { href: '/admin/pedidos', label: 'Pedidos Web & Ventas', icon: ShoppingBag, moduloId: 'pedidos' },
+      { href: '/admin/productos', label: 'Productos & Tienda', icon: Package, moduloId: 'productos' },
+      { href: '/admin/inventario', label: 'Inventario (Kardex)', icon: Boxes, moduloId: 'inventario' },
+      { href: '/admin/matriculas', label: 'Academia & Matrículas', icon: GraduationCap, moduloId: 'matriculas' },
     ]
   },
   {
     title: 'Analítica',
     items: [
-      { href: '/admin/reportes', label: 'Reportes', icon: BarChart3 },
+      { href: '/admin/reportes', label: 'Reportes', icon: BarChart3, moduloId: 'reportes' },
     ]
   },
   {
     title: 'Ajustes',
     items: [
-      { href: '/admin/configuracion', label: 'Configuración', icon: Settings },
+      { href: '/admin/configuracion', label: 'Configuración', icon: Settings, moduloId: 'configuracion' },
     ]
   }
 ];
@@ -67,11 +80,17 @@ interface AdminSidebarProps {
 export function AdminSidebar({ mobileOpen = false, onCloseMobile }: AdminSidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
-  const { userMeta, signOut } = useAuth();
-  const { sedeActiva, sedeInfo, setSede, sedes } = useSede();
+  const { userMeta, signOut, hasPermission } = useAuth();
+  const { sedeActiva, sedeInfo, setSede, sedes, puedeCambiarSede, sedesDisponibles } = useSede();
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [pedidosPendientes, setPedidosPendientes] = useState(0);
   const [sedeDropOpen, setSedeDropOpen] = useState(false);
+
+  // Filtrar secciones y enlaces según los permisos granulares asignados al usuario
+  const seccionesVisibles = NAV_SECTIONS.map((section) => ({
+    ...section,
+    items: section.items.filter((item) => hasPermission(item.moduloId)),
+  })).filter((section) => section.items.length > 0);
 
   // Consultar pedidos pendientes en tiempo real (filtrado por sede)
   useEffect(() => {
@@ -180,54 +199,63 @@ export function AdminSidebar({ mobileOpen = false, onCloseMobile }: AdminSidebar
             <span className="inline-block text-[10px] uppercase tracking-widest text-zinc-500 font-mono font-medium px-2.5 py-0.5 rounded-full bg-zinc-100 border border-zinc-200/80">
               Panel Administrativo
             </span>
-            {/* Selector de Sede — dropdown custom neutro con icono */}
+            {/* Selector de Sede — Solo desplegable para superadmins o usuarios globales */}
             <div className="relative flex justify-center">
-              <button
-                type="button"
-                onClick={() => setSedeDropOpen((v) => !v)}
-                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-zinc-200 bg-white text-zinc-700 text-[11px] font-semibold hover:bg-zinc-50 hover:border-zinc-300 transition-all cursor-pointer select-none"
-              >
-                <MapPin className="w-3 h-3 text-zinc-400 shrink-0" />
-                <span>{sedeInfo.nombre}</span>
-                <ChevronDown className={`w-3 h-3 text-zinc-400 transition-transform duration-200 ${sedeDropOpen ? 'rotate-180' : ''}`} />
-              </button>
-
-              <AnimatePresence>
-                {sedeDropOpen && (
-                  <motion.div
-                    initial={{ opacity: 0, y: -4, scale: 0.97 }}
-                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                    exit={{ opacity: 0, y: -4, scale: 0.97 }}
-                    transition={{ duration: 0.12 }}
-                    className="absolute top-full mt-1.5 left-1/2 -translate-x-1/2 w-44 bg-white rounded-xl border border-zinc-200 shadow-lg shadow-zinc-200/50 overflow-hidden z-50"
+              {puedeCambiarSede ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setSedeDropOpen((v) => !v)}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-zinc-200 bg-white text-zinc-700 text-[11px] font-semibold hover:bg-zinc-50 hover:border-zinc-300 transition-all cursor-pointer select-none"
                   >
-                    {Object.values(sedes).map((s) => {
-                      const isActive = s.id === sedeActiva;
-                      return (
-                        <button
-                          key={s.id}
-                          type="button"
-                          onClick={() => { setSede(s.id as SedeId); setSedeDropOpen(false); }}
-                          className={`w-full flex items-center gap-2.5 px-3 py-2 text-left text-xs transition-colors cursor-pointer ${
-                            isActive ? 'bg-zinc-50 font-bold text-zinc-900' : 'text-zinc-600 hover:bg-zinc-50'
-                          }`}
-                        >
-                          <MapPin className="w-3 h-3 text-zinc-400 shrink-0" />
-                          <span className="flex-1">{s.nombre}</span>
-                          {isActive && <Check className="w-3 h-3 text-zinc-500 shrink-0" />}
-                        </button>
-                      );
-                    })}
-                  </motion.div>
-                )}
-              </AnimatePresence>
+                    <MapPin className="w-3 h-3 text-zinc-400 shrink-0" />
+                    <span>{sedeInfo.nombre}</span>
+                    <ChevronDown className={`w-3 h-3 text-zinc-400 transition-transform duration-200 ${sedeDropOpen ? 'rotate-180' : ''}`} />
+                  </button>
+
+                  <AnimatePresence>
+                    {sedeDropOpen && (
+                      <motion.div
+                        initial={{ opacity: 0, y: -4, scale: 0.97 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: -4, scale: 0.97 }}
+                        transition={{ duration: 0.12 }}
+                        className="absolute top-full mt-1.5 left-1/2 -translate-x-1/2 w-44 bg-white rounded-xl border border-zinc-200 shadow-lg shadow-zinc-200/50 overflow-hidden z-50"
+                      >
+                        {sedesDisponibles.map((s) => {
+                          const isActive = s.id === sedeActiva;
+                          return (
+                            <button
+                              key={s.id}
+                              type="button"
+                              onClick={() => { setSede(s.id as SedeId); setSedeDropOpen(false); }}
+                              className={`w-full flex items-center gap-2.5 px-3 py-2 text-left text-xs transition-colors cursor-pointer ${
+                                isActive ? 'bg-zinc-50 font-bold text-zinc-900' : 'text-zinc-600 hover:bg-zinc-50'
+                              }`}
+                            >
+                              <MapPin className="w-3 h-3 text-zinc-400 shrink-0" />
+                              <span className="flex-1">{s.nombre}</span>
+                              {isActive && <Check className="w-3 h-3 text-zinc-500 shrink-0" />}
+                            </button>
+                          );
+                        })}
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </>
+              ) : (
+                <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-zinc-200/80 bg-zinc-50 text-zinc-700 text-[11px] font-semibold select-none shadow-2xs">
+                  <MapPin className="w-3 h-3 text-zinc-500 shrink-0" />
+                  <span>{sedeInfo.nombre}</span>
+                </div>
+              )}
             </div>
           </div>
         </div>
 
-        {/* Links de Navegación Organizados */}
+        {/* Links de Navegación Organizados según Permisos */}
         <nav className="p-3 space-y-5">
-          {NAV_SECTIONS.map((section, idx) => (
+          {seccionesVisibles.map((section, idx) => (
             <div key={idx}>
               <h4 className="px-3 mb-2 text-[10px] font-black text-zinc-400 uppercase tracking-widest">
                 {section.title}

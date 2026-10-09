@@ -11,6 +11,8 @@ import {
   Menu,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useAuth } from '@/context/AuthContext';
+import { ModuloId } from '@/lib/permisos';
 
 interface AdminBottomNavProps {
   onOpenMobileMenu: () => void;
@@ -18,28 +20,33 @@ interface AdminBottomNavProps {
 
 export function AdminBottomNav({ onOpenMobileMenu }: AdminBottomNavProps) {
   const pathname = usePathname();
+  const { hasPermission } = useAuth();
 
-  const NAV_ITEMS = [
+  const ALL_ITEMS: { href: string; label: string; icon: any; moduloId: ModuloId; isActive: boolean }[] = [
     {
       href: '/admin',
       label: 'Inicio',
       icon: LayoutDashboard,
+      moduloId: 'dashboard',
       isActive: pathname === '/admin',
     },
     {
       href: '/admin/pos',
       label: 'POS',
       icon: Store,
+      moduloId: 'pos',
       isActive: pathname.startsWith('/admin/pos'),
     },
     {
       href: '/admin/productos',
       label: 'Productos',
       icon: Package,
+      moduloId: 'productos',
       isActive: pathname.startsWith('/admin/productos'),
     },
-
   ];
+
+  const NAV_ITEMS = ALL_ITEMS.filter((item) => hasPermission(item.moduloId));
 
   return (
     <nav
