@@ -21,13 +21,13 @@ export const metadata: Metadata = {
     'matriculas academia barberia',
   ],
   alternates: {
-    canonical: 'https://galindobarber.pe/cursos',
+    canonical: 'https://galindobarber.com/cursos',
   },
   openGraph: {
     title: 'Cursos de Barbería Profesional | Galindo Barber Academy',
     description:
       'Formación técnica intensiva con modelos reales, horarios flexibles y docentes especializados en Ica y Huancayo.',
-    url: 'https://galindobarber.pe/cursos',
+    url: 'https://galindobarber.com/cursos',
     images: [
       {
         url: '/baner.webp',

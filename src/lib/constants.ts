@@ -59,7 +59,7 @@ export const BUSINESS_INFO = {
   address: 'Sede Ica: Calle Bolívar 536 | Sede Huancayo: Jr. Guido 654',
   whatsapp: '51914614424',
   whatsappDisplay: '+51 914 614 424',
-  email: 'contacto@galindobarber.pe',
+  email: 'contacto@galindobarber.com',
   openingHours: 'Lunes a Sábado: 9:00 AM - 8:00 PM',
   // Medios de Pago Oficiales de la Tienda (Stand Mostrador)
   yapeNumber: '972799397',

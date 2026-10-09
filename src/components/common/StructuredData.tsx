@@ -7,12 +7,12 @@ export function StructuredData() {
     '@graph': [
       {
         '@type': 'EducationalOrganization',
-        '@id': 'https://galindobarber.pe/#organization',
+        '@id': 'https://galindobarber.com/#organization',
         name: 'Galindo Barber Academy & Supply',
         alternateName: ['Galindo Barber', 'Academia de Barbería Galindo'],
-        url: 'https://galindobarber.pe',
-        logo: 'https://galindobarber.pe/logo.jpg',
-        image: 'https://galindobarber.pe/baner.webp',
+        url: 'https://galindobarber.com',
+        logo: 'https://galindobarber.com/logo.jpg',
+        image: 'https://galindobarber.com/baner.webp',
         description:
           'Escuela técnica especializada en formación de barberos profesionales, estilistas masculinos y distribución de herramientas oficiales de corte (Wahl, BaBylissPRO) en Ica y Huancayo, Perú.',
         email: BUSINESS_INFO.email,
@@ -53,7 +53,7 @@ export function StructuredData() {
               educationalCredentialAwarded: 'Certificado Técnico de Barbero Profesional',
               occupationalCategory: 'Barbero Profesional, Estilista Masculino',
               provider: {
-                '@id': 'https://galindobarber.pe/#organization',
+                '@id': 'https://galindobarber.com/#organization',
               },
             },
             {
@@ -64,7 +64,7 @@ export function StructuredData() {
               educationalCredentialAwarded: 'Certificado de Especialización en Fades y Visagismo',
               occupationalCategory: 'Barbero Especialista en Degradados',
               provider: {
-                '@id': 'https://galindobarber.pe/#organization',
+                '@id': 'https://galindobarber.com/#organization',
               },
             },
             {
@@ -75,7 +75,7 @@ export function StructuredData() {
               educationalCredentialAwarded: 'Certificado en Barboterapia y Cuidado Facial Masculino',
               occupationalCategory: 'Especialista en Barboterapia y Barba',
               provider: {
-                '@id': 'https://galindobarber.pe/#organization',
+                '@id': 'https://galindobarber.com/#organization',
               },
             },
           ],
@@ -83,7 +83,7 @@ export function StructuredData() {
         subOrganization: [
           {
             '@type': ['HairSalon', 'EducationalOrganization', 'Store'],
-            '@id': 'https://galindobarber.pe/#sede-ica',
+            '@id': 'https://galindobarber.com/#sede-ica',
             name: 'Galindo Barber Academy & Supply - Sede Central Ica',
             telephone: SEDES.ica.whatsappDisplay,
             address: {
@@ -119,7 +119,7 @@ export function StructuredData() {
           },
           {
             '@type': ['HairSalon', 'EducationalOrganization', 'Store'],
-            '@id': 'https://galindobarber.pe/#sede-huancayo',
+            '@id': 'https://galindobarber.com/#sede-huancayo',
             name: 'Galindo Barber Academy & Supply - Sede Huancayo',
             telephone: SEDES.huancayo.whatsappDisplay,
             address: {
@@ -157,12 +157,12 @@ export function StructuredData() {
       },
       {
         '@type': 'WebSite',
-        '@id': 'https://galindobarber.pe/#website',
-        url: 'https://galindobarber.pe',
+        '@id': 'https://galindobarber.com/#website',
+        url: 'https://galindobarber.com',
         name: 'Galindo Barber Academy & Supply',
         description: 'Academia de Barbería Profesional y Tienda de Herramientas de Corte en Perú',
         publisher: {
-          '@id': 'https://galindobarber.pe/#organization',
+          '@id': 'https://galindobarber.com/#organization',
         },
         inLanguage: 'es-PE',
       },

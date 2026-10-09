@@ -26,7 +26,7 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://galindobarber.pe"),
+  metadataBase: new URL("https://galindobarber.com"),
   title: {
     default: "Galindo Barber Academy & Supply | Academia de Barbería Profesional en Ica y Huancayo",
     template: "%s | Galindo Barber Academy",
@@ -72,13 +72,13 @@ export const metadata: Metadata = {
     "Galindo Barber",
     "Galindo Barber Academy",
   ],
-  authors: [{ name: "Galindo Barber Academy & Supply", url: "https://galindobarber.pe" }],
+  authors: [{ name: "Galindo Barber Academy & Supply", url: "https://galindobarber.com" }],
   creator: "Galindo Barber Academy",
   publisher: "GALINDO BARBERS E.I.R.L.",
   category: "Education",
   classification: "Academia de Barbería y Comercio de Herramientas de Corte",
   alternates: {
-    canonical: "https://galindobarber.pe",
+    canonical: "https://galindobarber.com",
   },
   robots: {
     index: true,
@@ -94,7 +94,7 @@ export const metadata: Metadata = {
   openGraph: {
     type: "website",
     locale: "es_PE",
-    url: "https://galindobarber.pe",
+    url: "https://galindobarber.com",
     siteName: "Galindo Barber Academy & Supply",
     title: "Galindo Barber Academy & Supply | Academia de Barbería en Ica y Huancayo",
     description:

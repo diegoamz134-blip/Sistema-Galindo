@@ -20,13 +20,13 @@ export const metadata: Metadata = {
     'insumos para barberos',
   ],
   alternates: {
-    canonical: 'https://galindobarber.pe/tienda',
+    canonical: 'https://galindobarber.com/tienda',
   },
   openGraph: {
     title: 'Tienda Barber Supply | Galindo Barber Academy',
     description:
       'Compra máquinas originales Wahl, BaBylissPRO y herramientas profesionales de barbería con recojo express en tienda física de Ica y Huancayo.',
-    url: 'https://galindobarber.pe/tienda',
+    url: 'https://galindobarber.com/tienda',
     images: [
       {
         url: '/baner.webp',

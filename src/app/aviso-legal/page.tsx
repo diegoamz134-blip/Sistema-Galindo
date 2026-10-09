@@ -10,7 +10,7 @@ export const metadata: Metadata = {
   title: 'Aviso Legal | Galindo Barber Academy & Supply',
   description: 'Información legal, titularidad corporativa y condiciones de uso del sitio web de Galindo Barber Academy & Supply conforme a las leyes de la República del Perú.',
   alternates: {
-    canonical: 'https://galindobarber.pe/aviso-legal',
+    canonical: 'https://galindobarber.com/aviso-legal',
   },
 };
 

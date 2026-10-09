@@ -9,7 +9,7 @@ export default function robots(): MetadataRoute.Robots {
         disallow: ['/admin', '/admin/*', '/ticket/*'],
       },
     ],
-    sitemap: 'https://galindobarber.pe/sitemap.xml',
-    host: 'https://galindobarber.pe',
+    sitemap: 'https://galindobarber.com/sitemap.xml',
+    host: 'https://galindobarber.com',
   };
 }
