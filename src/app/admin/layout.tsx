@@ -4,6 +4,10 @@ import { AdminLayoutClient } from './AdminLayoutClient';
 export const metadata = {
   title: 'Panel Administrativo | Galindo Barber Academy Ica',
   description: 'Control de tienda, inventario, caja chica y matrículas de la escuela de barbería Galindo en Ica.',
+  robots: {
+    index: false,
+    follow: false,
+  },
 };
 
 export default function AdminLayout({

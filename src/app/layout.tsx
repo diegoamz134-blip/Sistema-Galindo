@@ -28,25 +28,58 @@ export const viewport: Viewport = {
 export const metadata: Metadata = {
   metadataBase: new URL("https://galindobarber.pe"),
   title: {
-    default: "Galindo Barber Academy & Supply | Ica y Huancayo, Perú",
-    template: "%s | Galindo Barber",
+    default: "Galindo Barber Academy & Supply | Academia de Barbería Profesional en Ica y Huancayo",
+    template: "%s | Galindo Barber Academy",
   },
   description:
-    "Escuela técnica de barbería profesional y tienda oficial de herramientas de corte (Wahl, BaBylissPRO) en Ica y Huancayo. Cursos presenciales de fade, visagismo y kits de inicio.",
+    "Academia líder en formación de Barberos Profesionales y Estilistas Masculinos en Ica y Huancayo. Cursos presenciales de corte de cabello, fade, visagismo, tijera y venta de máquinas originales Wahl y BaBylissPRO. ¡Matrículas abiertas con certificación técnica!",
   keywords: [
-    "barbería Ica",
-    "barbería Huancayo",
-    "cursos de barbería",
-    "academia de barbería Perú",
-    "máquinas Wahl originales",
+    // Profesiones y carreras
+    "barbero profesional",
+    "carrera de barbero",
+    "estilista masculino",
+    "tecnico en barberia",
+    "profesion de barbero peru",
+    // Cursos y capacitaciones
+    "academia de barberia",
+    "curso de barberia",
+    "escuela de barberia",
+    "clases de barberia",
+    "aprender barberia desde cero",
+    "cursos de corte de cabello",
+    "tecnicas de fade y degradados",
+    "visagismo capilar masculino",
+    "colorimetria y disenos",
+    "barboterapia y afeitado tradicional",
+    "certificacion tecnica de barbero",
+    // Ubicaciones
+    "barberia en Ica",
+    "cursos de barberia en Ica",
+    "academia de barberia Ica",
+    "barberia en Huancayo",
+    "cursos de barberia en Huancayo",
+    "academia de barberia Huancayo",
+    "escuela de barberos peru",
+    // Tienda y herramientas
+    "maquinas Wahl originales",
     "Wahl Magic Clip",
     "BaBylissPRO Skeleton",
-    "herramientas de barbería",
-    "fade profesional",
+    "herramientas para barbero",
+    "tijeras de barbero filo dulce",
+    "tienda de barberia en Ica",
+    "tienda de barberia en Huancayo",
+    "barber supply peru",
+    "Galindo Barber",
+    "Galindo Barber Academy",
   ],
-  authors: [{ name: "Galindo Barber Academy & Supply" }],
-  creator: "Galindo Barber",
+  authors: [{ name: "Galindo Barber Academy & Supply", url: "https://galindobarber.pe" }],
+  creator: "Galindo Barber Academy",
   publisher: "GALINDO BARBERS E.I.R.L.",
+  category: "Education",
+  classification: "Academia de Barbería y Comercio de Herramientas de Corte",
+  alternates: {
+    canonical: "https://galindobarber.pe",
+  },
   robots: {
     index: true,
     follow: true,
@@ -63,24 +96,27 @@ export const metadata: Metadata = {
     locale: "es_PE",
     url: "https://galindobarber.pe",
     siteName: "Galindo Barber Academy & Supply",
-    title: "Galindo Barber Academy & Supply | Ica y Huancayo",
+    title: "Galindo Barber Academy & Supply | Academia de Barbería en Ica y Huancayo",
     description:
-      "Escuela de barbería profesional y tienda oficial de herramientas de corte. Cursos presenciales y venta de máquinas originales.",
+      "Aprende la profesión de Barbero Profesional con clases 100% prácticas en Ica y Huancayo. Tienda oficial de máquinas de corte Wahl y BaBylissPRO.",
     images: [
       {
         url: "/baner.webp",
         width: 1200,
         height: 630,
-        alt: "Galindo Barber Academy & Supply Portada Oficial",
+        alt: "Galindo Barber Academy & Supply - Formación de Barberos Profesionales",
       },
     ],
   },
   twitter: {
     card: "summary_large_image",
-    title: "Galindo Barber Academy & Supply",
+    title: "Galindo Barber Academy & Supply | Academia de Barbería en Ica y Huancayo",
     description:
       "Formación técnica profesional en barbería y venta de herramientas originales en Ica y Huancayo, Perú.",
     images: ["/baner.webp"],
+  },
+  verification: {
+    google: process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION || "",
   },
   icons: {
     icon: [

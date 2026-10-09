@@ -9,29 +9,89 @@ export function StructuredData() {
         '@type': 'EducationalOrganization',
         '@id': 'https://galindobarber.pe/#organization',
         name: 'Galindo Barber Academy & Supply',
-        alternateName: 'Galindo Barber',
+        alternateName: ['Galindo Barber', 'Academia de Barbería Galindo'],
         url: 'https://galindobarber.pe',
         logo: 'https://galindobarber.pe/logo.jpg',
         image: 'https://galindobarber.pe/baner.webp',
         description:
-          'Escuela técnica de barbería profesional y tienda de herramientas originales de corte en Ica y Huancayo, Perú.',
+          'Escuela técnica especializada en formación de barberos profesionales, estilistas masculinos y distribución de herramientas oficiales de corte (Wahl, BaBylissPRO) en Ica y Huancayo, Perú.',
         email: BUSINESS_INFO.email,
         telephone: '+51914614424',
         sameAs: [
           'https://instagram.com/galindo.barbershop',
           'https://facebook.com/galindobarberacademy',
         ],
+        knowsAbout: [
+          'Barbería Profesional',
+          'Estilismo Masculino',
+          'Técnicas de Fade y Degradados',
+          'Visagismo Capilar',
+          'Corte Clásico a Tijera',
+          'Colorimetría y Diseños Freestyle',
+          'Barboterapia y Afeitado Tradicional',
+          'Herramientas Profesionales de Barbería',
+        ],
+        areaServed: [
+          {
+            '@type': 'City',
+            name: 'Ica',
+          },
+          {
+            '@type': 'City',
+            name: 'Huancayo',
+          },
+        ],
+        hasOfferCatalog: {
+          '@type': 'OfferCatalog',
+          name: 'Programas de Formación y Carreras Técnicas',
+          itemListElement: [
+            {
+              '@type': 'Course',
+              name: 'Carrera de Barbería Profesional Integral',
+              description:
+                'Formación técnica completa para desempeñarse como Barbero Profesional: técnicas de fade, corte a tijera, visagismo, afeitado tradicional con toalla caliente y bioseguridad.',
+              educationalCredentialAwarded: 'Certificado Técnico de Barbero Profesional',
+              occupationalCategory: 'Barbero Profesional, Estilista Masculino',
+              provider: {
+                '@id': 'https://galindobarber.pe/#organization',
+              },
+            },
+            {
+              '@type': 'Course',
+              name: 'Especialización en Fades, Degradados y Visagismo',
+              description:
+                'Perfeccionamiento en técnicas modernas de Low Fade, Mid Fade, High Fade, Taper y armonización facial para clientes exigentes.',
+              educationalCredentialAwarded: 'Certificado de Especialización en Fades y Visagismo',
+              occupationalCategory: 'Barbero Especialista en Degradados',
+              provider: {
+                '@id': 'https://galindobarber.pe/#organization',
+              },
+            },
+            {
+              '@type': 'Course',
+              name: 'Taller de Barboterapia y Afeitado Tradicional',
+              description:
+                'Dominio de navaja clásica, toallas calientes, vapor ozono, aceites esenciales y perfilado de barba profesional.',
+              educationalCredentialAwarded: 'Certificado en Barboterapia y Cuidado Facial Masculino',
+              occupationalCategory: 'Especialista en Barboterapia y Barba',
+              provider: {
+                '@id': 'https://galindobarber.pe/#organization',
+              },
+            },
+          ],
+        },
         subOrganization: [
           {
-            '@type': ['HairSalon', 'Store'],
+            '@type': ['HairSalon', 'EducationalOrganization', 'Store'],
             '@id': 'https://galindobarber.pe/#sede-ica',
-            name: 'Galindo Barber - Sede Central Ica',
+            name: 'Galindo Barber Academy & Supply - Sede Central Ica',
             telephone: SEDES.ica.whatsappDisplay,
             address: {
               '@type': 'PostalAddress',
               streetAddress: 'Calle Bolívar 536',
               addressLocality: 'Ica',
               addressRegion: 'Ica',
+              postalCode: '11000',
               addressCountry: 'PE',
             },
             geo: {
@@ -58,15 +118,16 @@ export function StructuredData() {
             paymentAccepted: ['Cash', 'Yape', 'Plin', 'Credit Card', 'Bank Transfer'],
           },
           {
-            '@type': ['HairSalon', 'Store'],
+            '@type': ['HairSalon', 'EducationalOrganization', 'Store'],
             '@id': 'https://galindobarber.pe/#sede-huancayo',
-            name: 'Galindo Barber - Sede Huancayo',
+            name: 'Galindo Barber Academy & Supply - Sede Huancayo',
             telephone: SEDES.huancayo.whatsappDisplay,
             address: {
               '@type': 'PostalAddress',
               streetAddress: 'Jr. Guido 654',
               addressLocality: 'Huancayo',
               addressRegion: 'Junín',
+              postalCode: '12000',
               addressCountry: 'PE',
             },
             geo: {
@@ -98,8 +159,8 @@ export function StructuredData() {
         '@type': 'WebSite',
         '@id': 'https://galindobarber.pe/#website',
         url: 'https://galindobarber.pe',
-        name: 'Galindo Barber',
-        description: 'Academia de Barbería y Tienda de Herramientas Originales en Perú',
+        name: 'Galindo Barber Academy & Supply',
+        description: 'Academia de Barbería Profesional y Tienda de Herramientas de Corte en Perú',
         publisher: {
           '@id': 'https://galindobarber.pe/#organization',
         },
