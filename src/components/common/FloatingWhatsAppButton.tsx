@@ -1,11 +1,13 @@
 'use client';
 
 import React, { useState } from 'react';
+import { usePathname } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useCart } from '@/context/CartContext';
 import { SEDES } from '@/lib/constants';
 
 export function FloatingWhatsAppButton() {
+  const pathname = usePathname();
   const { sedeSeleccionada } = useCart();
   const sedeActual = SEDES[sedeSeleccionada] || SEDES['ica'];
   const [hovered, setHovered] = useState(false);
@@ -21,6 +23,18 @@ export function FloatingWhatsAppButton() {
     window.addEventListener('galindo_cookie_consent_updated', handleUpdate);
     return () => window.removeEventListener('galindo_cookie_consent_updated', handleUpdate);
   }, []);
+
+  // Mostrar en Inicio (/), Tienda (/tienda) y Cursos (/cursos)
+  const isRutaPermitida =
+    pathname === '/' ||
+    pathname === '/tienda' ||
+    pathname?.startsWith('/tienda/') ||
+    pathname === '/cursos' ||
+    pathname?.startsWith('/cursos/');
+
+  if (!isRutaPermitida) {
+    return null;
+  }
 
   const whatsappUrl = `https://wa.me/${sedeActual.whatsapp}?text=${encodeURIComponent(
     `Hola Galindo Barber (${sedeActual.nombre}). Deseo realizar una consulta sobre los cursos y productos disponibles en ${sedeActual.ciudad}.`
