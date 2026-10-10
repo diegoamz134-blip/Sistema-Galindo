@@ -146,6 +146,127 @@ export async function getCategories(): Promise<Categoria[]> {
 }
 
 // -------------------------------------------------------------------------
+// 2.1 Crear nueva categoría
+// -------------------------------------------------------------------------
+export interface CreateCategoryInput {
+  nombre: string;
+  descripcion?: string;
+  icono?: string;
+}
+
+export async function createCategory(
+  input: CreateCategoryInput
+): Promise<{ success: boolean; data?: Categoria; error?: string }> {
+  try {
+    const slugBase = input.nombre
+      .toLowerCase()
+      .trim()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '');
+
+    const slug = `${slugBase}-${Date.now().toString().slice(-4)}`;
+
+    const { data: maxOrdenData } = await supabase
+      .from('categorias')
+      .select('orden')
+      .order('orden', { ascending: false })
+      .limit(1);
+
+    const siguienteOrden = ((maxOrdenData?.[0]?.orden) || 0) + 1;
+
+    const nuevaCat = {
+      nombre: input.nombre.trim(),
+      slug,
+      descripcion: input.descripcion?.trim() || null,
+      icono: input.icono?.trim() || 'Package',
+      orden: siguienteOrden,
+      activo: true,
+    };
+
+    const { data, error } = await supabase
+      .from('categorias')
+      .insert([nuevaCat])
+      .select('*')
+      .single();
+
+    if (error) {
+      console.error('Error al insertar categoría en Supabase:', error);
+      return { success: false, error: error.message };
+    }
+
+    return { success: true, data: data as Categoria };
+  } catch (err: any) {
+    console.error('Error al crear categoría:', err);
+    return { success: false, error: err.message || 'Error inesperado al crear categoría' };
+  }
+}
+
+// -------------------------------------------------------------------------
+// 2.2 Desactivar o Activar categoría
+// -------------------------------------------------------------------------
+export async function toggleCategoriaActiva(
+  categoriaId: string,
+  activo: boolean
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { error } = await supabase
+      .from('categorias')
+      .update({ activo })
+      .eq('id', categoriaId);
+
+    if (error) return { success: false, error: error.message };
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err.message || 'Error al actualizar categoría' };
+  }
+}
+
+// -------------------------------------------------------------------------
+// 2.3 Eliminar categoría de Supabase
+// -------------------------------------------------------------------------
+export async function deleteCategory(
+  categoriaId: string
+): Promise<{ success: boolean; error?: string; count?: number }> {
+  try {
+    // 1. Verificar si hay productos que usan esta categoría
+    const { count, error: countError } = await supabase
+      .from('productos')
+      .select('id', { count: 'exact', head: true })
+      .eq('categoria_id', categoriaId);
+
+    if (countError) {
+      console.warn('Error verificando productos de la categoría:', countError);
+    }
+
+    if (count && count > 0) {
+      return {
+        success: false,
+        error: `No se puede eliminar porque tiene ${count} producto(s) asignado(s). Primero reasigna o elimina esos productos.`,
+        count,
+      };
+    }
+
+    // 2. Proceder a eliminar de la tabla categorias
+    const { error } = await supabase
+      .from('categorias')
+      .delete()
+      .eq('id', categoriaId);
+
+    if (error) {
+      console.error('Error al eliminar categoría en Supabase:', error);
+      return { success: false, error: error.message };
+    }
+
+    return { success: true };
+  } catch (err: any) {
+    console.error('Error al eliminar categoría:', err);
+    return { success: false, error: err.message || 'Error inesperado al eliminar categoría' };
+  }
+}
+
+// -------------------------------------------------------------------------
 // 3. Crear un nuevo producto en Supabase
 // -------------------------------------------------------------------------
 export async function createProduct(

@@ -30,7 +30,9 @@ import {
   ChevronRight,
   ArrowRightLeft,
   Truck,
+  FileSpreadsheet,
 } from 'lucide-react';
+import { ModalInventarioExcel } from '@/components/admin/ModalInventarioExcel';
 
 const DEFAULT_PRODUCT_IMAGE =
   'https://images.unsplash.com/photo-1503951914875-452162b0f3f1?auto=format&fit=crop&q=80&w=300';
@@ -84,6 +86,9 @@ export default function AdminInventarioPage() {
   const [motivoTraslado, setMotivoTraslado] = useState('Reabastecimiento de sede');
   const [isSavingTraslado, setIsSavingTraslado] = useState(false);
   const [formTrasladoError, setFormTrasladoError] = useState<string | null>(null);
+
+  // Modal de Importación/Exportación Masiva Excel
+  const [showModalExcel, setShowModalExcel] = useState(false);
 
   // -------------------------------------------------------------------------
   // 1. Cargar datos paginados (exactamente 10 por página)
@@ -381,6 +386,16 @@ export default function AdminInventarioPage() {
         </div>
 
         <div className="flex items-center gap-2.5">
+          <button
+            onClick={() => setShowModalExcel(true)}
+            className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl text-xs font-bold bg-emerald-50 text-emerald-800 border border-emerald-200 hover:bg-emerald-100/80 shadow-xs transition-all active:scale-95"
+            title="Importar o exportar stock masivamente desde Excel"
+          >
+            <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
+            <span className="hidden sm:inline">Excel Inventario</span>
+            <span className="sm:hidden">Excel</span>
+          </button>
+
           <button
             onClick={() => {
               setFormTrasladoError(null);
@@ -1244,6 +1259,18 @@ export default function AdminInventarioPage() {
           </div>
         </div>
       )}
+
+      {/* Modal de Importación / Exportación Masiva de Inventario en Excel */}
+      <ModalInventarioExcel
+        isOpen={showModalExcel}
+        onClose={() => setShowModalExcel(false)}
+        productos={productos}
+        onActualizacionExitosa={() => {
+          cargarDatos(false, pagina);
+          setToastMessage('Inventario actualizado masivamente desde Excel.');
+          setTimeout(() => setToastMessage(null), 4000);
+        }}
+      />
     </div>
   );
 }

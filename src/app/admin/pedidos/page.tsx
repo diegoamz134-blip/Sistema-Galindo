@@ -149,17 +149,7 @@ export default function AdminPedidosPage() {
   const pedidosFiltrados = useMemo(() => {
     let resultado = todosPedidosSede;
 
-    // 1. Canal primario
-    if (canalActivo !== 'TODOS') {
-      resultado = resultado.filter((p) => p.tipo_canal === canalActivo);
-    }
-
-    // 2. Estado
-    if (filtroEstado !== 'TODOS') {
-      resultado = resultado.filter((p) => p.estado === filtroEstado);
-    }
-
-    // 3. Búsqueda por texto
+    // 1. Si hay búsqueda por texto, buscar en todos los canales de la sede
     if (busqueda.trim()) {
       const q = busqueda.toLowerCase().trim();
       resultado = resultado.filter(
@@ -171,6 +161,16 @@ export default function AdminPedidosPage() {
           p.items.some((it) => it.nombre_producto.toLowerCase().includes(q)) ||
           (p.notas && p.notas.toLowerCase().includes(q))
       );
+    } else {
+      // Si no hay búsqueda de texto, filtrar por el canal activo
+      if (canalActivo !== 'TODOS') {
+        resultado = resultado.filter((p) => p.tipo_canal === canalActivo);
+      }
+    }
+
+    // 2. Estado
+    if (filtroEstado !== 'TODOS') {
+      resultado = resultado.filter((p) => p.estado === filtroEstado);
     }
 
     return resultado;

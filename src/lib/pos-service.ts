@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabase';
 import { Producto, MetodoPago } from '@/types/database';
+import { matchSede } from '@/lib/academia-service';
 
 export interface VentaItemPOS {
   producto: Producto;
@@ -272,31 +273,204 @@ export async function procesarVentaPOS(
 }
 
 /**
- * Obtiene el listado de ventas del día realizadas en el POS
+ * Obtiene el listado de ventas del día realizadas en el POS filtrado estrictamente por sede
  */
-export async function getVentasHoyPOS(): Promise<VentaRegistradaPOS[]> {
+export async function getVentasHoyPOS(
+  sedeId?: 'ica' | 'huancayo',
+  filtroPeriodo: 'HOY' | 'TODAS' = 'HOY'
+): Promise<VentaRegistradaPOS[]> {
   try {
-    // 1. Intentar consultar pedidos de Supabase
-    const { data, error } = await supabase
+    let query = supabase
       .from('pedidos')
-      .select('id, codigo_pedido, cliente_nombre, cliente_telefono, cliente_dni, total, metodo_pago, metodo_entrega, estado, creado_en')
-      .order('creado_en', { ascending: false })
-      .limit(30);
+      .select('id, codigo_pedido, cliente_nombre, cliente_telefono, cliente_dni, total, metodo_pago, metodo_entrega, estado, creado_en, sede_id, ciudad, notas')
+      .neq('estado', 'CANCELADO')
+      .order('creado_en', { ascending: false });
 
-    if (!error && data && data.length > 0) {
-      return data.map((d: any) => ({
-        ...d,
-        items_count: 1,
-      }));
+    if (filtroPeriodo === 'HOY') {
+      const hoyInicio = new Date();
+      hoyInicio.setHours(0, 0, 0, 0);
+      query = query.gte('creado_en', hoyInicio.toISOString());
+    } else {
+      query = query.limit(50);
     }
 
-    // 2. Eliminamos la lectura de localStorage para evitar datos "fantasma"
-    // cuando la base de datos se limpia o resetea.
-    return [];
+    const { data, error } = await query;
 
-    return [];
+    if (error) {
+      console.error('Error al consultar ventas del POS:', error);
+      return [];
+    }
+
+    if (!data || data.length === 0) return [];
+
+    let filtrados = data;
+    if (sedeId) {
+      filtrados = data.filter((d: any) => {
+        const sedeCandidata = d.sede_id || d.ciudad || d.notas || '';
+        return matchSede(sedeCandidata, sedeId);
+      });
+    }
+
+    return filtrados.map((d: any) => ({
+      ...d,
+      items_count: 1,
+    }));
   } catch (err) {
     console.error('Error al consultar ventas del POS:', err);
     return [];
+  }
+}
+
+/**
+ * Calcula el rango de inicio y fin de una fecha en la zona horaria de Perú (UTC-5)
+ */
+export function getRangoFechaPeru(fechaStr: string) {
+  const [y, m, d] = fechaStr.split('-').map(Number);
+  const inicio = new Date(Date.UTC(y, m - 1, d, 5, 0, 0, 0));
+  const fin = new Date(Date.UTC(y, m - 1, d + 1, 4, 59, 59, 999));
+  return {
+    inicioISO: inicio.toISOString(),
+    finISO: fin.toISOString(),
+  };
+}
+
+export interface FiltrosVentasPOS {
+  sedeId?: 'ica' | 'huancayo';
+  fecha?: string; // 'YYYY-MM-DD' o '' para todas
+  busqueda?: string;
+  pagina?: number;
+  porPagina?: number;
+  incluirAnulados?: boolean;
+}
+
+export interface ResultadoVentasPOSPaginado {
+  ventas: VentaRegistradaPOS[];
+  totalRegistros: number;
+  totalPaginas: number;
+  paginaActual: number;
+  totalVendido: number;
+  totalTicketsValidos: number;
+  totalAnulados: number;
+}
+
+/**
+ * Consulta ventas de mostrador con paginación optimizada (10 por página),
+ * filtros por fecha seleccionada y conteo de totales de arqueo.
+ */
+export async function getVentasPOSPaginadas({
+  sedeId,
+  fecha,
+  busqueda = '',
+  pagina = 1,
+  porPagina = 10,
+  incluirAnulados = true,
+}: FiltrosVentasPOS): Promise<ResultadoVentasPOSPaginado> {
+  try {
+    let query = supabase
+      .from('pedidos')
+      .select(
+        'id, codigo_pedido, cliente_nombre, cliente_telefono, cliente_dni, total, metodo_pago, metodo_entrega, estado, creado_en, sede_id, ciudad, notas',
+        { count: 'exact' }
+      )
+      .order('creado_en', { ascending: false });
+
+    // 1. Filtro de Fecha (Perú UTC-5)
+    if (fecha && fecha.trim()) {
+      const { inicioISO, finISO } = getRangoFechaPeru(fecha.trim());
+      query = query.gte('creado_en', inicioISO).lte('creado_en', finISO);
+    }
+
+    // 2. Filtro de Estado
+    if (!incluirAnulados) {
+      query = query.neq('estado', 'CANCELADO');
+    }
+
+    // 3. Búsqueda de Texto
+    const q = busqueda.trim();
+    if (q) {
+      query = query.or(
+        `codigo_pedido.ilike.%${q}%,cliente_nombre.ilike.%${q}%,cliente_dni.ilike.%${q}%,cliente_telefono.ilike.%${q}%`
+      );
+    }
+
+    // 4. Paginación en BD: traer únicamente los 10 registros solicitados
+    const from = (pagina - 1) * porPagina;
+    const to = from + porPagina - 1;
+    query = query.range(from, to);
+
+    const { data, count, error } = await query;
+
+    if (error) {
+      console.error('Error al consultar ventas paginadas:', error);
+      return {
+        ventas: [],
+        totalRegistros: 0,
+        totalPaginas: 1,
+        paginaActual: pagina,
+        totalVendido: 0,
+        totalTicketsValidos: 0,
+        totalAnulados: 0,
+      };
+    }
+
+    let filtrados = data || [];
+    if (sedeId) {
+      filtrados = filtrados.filter((d: any) => {
+        const sedeCandidata = d.sede_id || d.ciudad || d.notas || '';
+        return matchSede(sedeCandidata, sedeId);
+      });
+    }
+
+    // Totales del período filtrado para los KPIs
+    let queryTotales = supabase
+      .from('pedidos')
+      .select('total, estado, sede_id, ciudad, notas');
+
+    if (fecha && fecha.trim()) {
+      const { inicioISO, finISO } = getRangoFechaPeru(fecha.trim());
+      queryTotales = queryTotales.gte('creado_en', inicioISO).lte('creado_en', finISO);
+    }
+
+    const { data: dataTotales } = await queryTotales;
+    let totalesSede = dataTotales || [];
+    if (sedeId) {
+      totalesSede = totalesSede.filter((d: any) =>
+        matchSede(d.sede_id || d.ciudad || d.notas || '', sedeId)
+      );
+    }
+
+    const ticketsValidos = totalesSede.filter((p: any) => p.estado !== 'CANCELADO');
+    const totalVendido = ticketsValidos.reduce((acc, p) => acc + Number(p.total || 0), 0);
+    const totalTicketsValidos = ticketsValidos.length;
+    const totalAnulados = totalesSede.filter((p: any) => p.estado === 'CANCELADO').length;
+
+    const totalRegistros = count !== null ? count : filtrados.length;
+    const totalPaginas = Math.max(1, Math.ceil(totalRegistros / porPagina));
+
+    const ventas = filtrados.map((d: any) => ({
+      ...d,
+      items_count: 1,
+    }));
+
+    return {
+      ventas,
+      totalRegistros,
+      totalPaginas,
+      paginaActual: pagina,
+      totalVendido,
+      totalTicketsValidos,
+      totalAnulados,
+    };
+  } catch (err) {
+    console.error('Error en getVentasPOSPaginadas:', err);
+    return {
+      ventas: [],
+      totalRegistros: 0,
+      totalPaginas: 1,
+      paginaActual: 1,
+      totalVendido: 0,
+      totalTicketsValidos: 0,
+      totalAnulados: 0,
+    };
   }
 }

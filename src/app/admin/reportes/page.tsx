@@ -23,14 +23,33 @@ import {
   Calendar,
   Wallet,
   Activity,
-  PieChart as PieChartIcon
+  PieChart as PieChartIcon,
+  FileSpreadsheet,
+  RefreshCw,
 } from 'lucide-react';
+import { exportarReporteFinancieroExcel } from '@/lib/excel-reportes-service';
 
 export default function ReportesPage() {
   const { sedeActiva } = useSede();
   const [rangoFecha, setRangoFecha] = useState<RangoFecha>('7_DIAS');
   const [data, setData] = useState<ReporteFinanciero | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isExportando, setIsExportando] = useState(false);
+
+  const handleExportarExcel = async () => {
+    setIsExportando(true);
+    try {
+      await exportarReporteFinancieroExcel({
+        rango: rangoFecha,
+        sedeFiltro: sedeActiva,
+      });
+    } catch (err) {
+      console.error('Error al exportar reporte financiero:', err);
+      alert('Ocurrió un error al generar el archivo Excel.');
+    } finally {
+      setIsExportando(false);
+    }
+  };
 
   useEffect(() => {
     let isMounted = true;
@@ -82,9 +101,18 @@ export default function ReportesPage() {
           <BotonRango valor="MES" label="Este Mes" />
           <BotonRango valor="AÑO" label="Este Año" />
           <BotonRango valor="TODO" label="Histórico" />
-          <button className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold bg-white text-zinc-800 border border-zinc-200 hover:bg-zinc-100 transition-all ml-auto md:ml-2">
-            <Download className="w-4 h-4" />
-            Exportar
+          <button
+            onClick={handleExportarExcel}
+            disabled={isExportando || isLoading}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black bg-emerald-600 text-white hover:bg-emerald-700 shadow-md transition-all ml-auto md:ml-2 active:scale-95 disabled:opacity-50 cursor-pointer"
+            title="Descargar reporte completo en Excel (.xlsx)"
+          >
+            {isExportando ? (
+              <RefreshCw className="w-4 h-4 animate-spin" />
+            ) : (
+              <FileSpreadsheet className="w-4 h-4" />
+            )}
+            <span>{isExportando ? 'Generando Excel...' : 'Exportar a Excel'}</span>
           </button>
         </div>
       </div>

@@ -16,6 +16,7 @@ import {
   CheckCircle2,
   Clock,
   ChevronRight,
+  XCircle,
 } from 'lucide-react';
 import { formatCurrency } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
@@ -318,7 +319,11 @@ export default function AdminDashboardPage() {
                       </div>
 
                       <div className="flex items-center justify-between sm:justify-end gap-3 shrink-0">
-                        <span className="text-xs font-black font-mono text-zinc-950">
+                        <span
+                          className={`text-xs font-black font-mono ${
+                            ped.estado === 'CANCELADO' ? 'text-zinc-400 line-through' : 'text-zinc-950'
+                          }`}
+                        >
                           {formatCurrency(ped.total)}
                         </span>
 
@@ -333,6 +338,16 @@ export default function AdminDashboardPage() {
                             <CheckCircle2 className="w-3.5 h-3.5" />
                             <span>{isUpdating ? 'Actualizando...' : 'Entregar'}</span>
                           </button>
+                        ) : ped.estado === 'CANCELADO' ? (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold bg-rose-50 text-rose-700 border border-rose-200">
+                            <XCircle className="w-3.5 h-3.5 text-rose-600" />
+                            <span>Anulado</span>
+                          </span>
+                        ) : ped.estado === 'PAGADO' ? (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
+                            <CheckCircle2 className="w-3.5 h-3.5 text-blue-600" />
+                            <span>Pagado</span>
+                          </span>
                         ) : (
                           <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
                             <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />

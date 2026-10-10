@@ -23,7 +23,7 @@ import { formatCurrency } from '@/lib/utils';
 interface AnularPedidoModalProps {
   isOpen: boolean;
   onClose: () => void;
-  pedido: PedidoCompleto | null;
+  pedido: PedidoCompleto | any | null;
   usuarioActual?: string;
   onAnulacionExitosa: () => void;
 }
@@ -97,7 +97,7 @@ export function AnularPedidoModal({
     }
   };
 
-  const totalProductos = (pedido.items || []).reduce((acc, it) => acc + (it.cantidad || 1), 0);
+  const totalProductos = (pedido.items || []).reduce((acc: number, it: any) => acc + (Number(it.cantidad) || 1), 0);
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto flex items-center justify-center p-3 sm:p-5">

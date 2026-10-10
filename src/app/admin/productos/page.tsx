@@ -18,7 +18,11 @@ import {
   ChevronRight,
   EyeOff,
   Eye,
+  FileSpreadsheet,
+  FolderPlus,
 } from 'lucide-react';
+import { ModalInventarioExcel } from '@/components/admin/ModalInventarioExcel';
+import { ModalGestionCategorias } from '@/components/admin/productos/ModalGestionCategorias';
 import { formatCurrency } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
 import { Producto, Categoria } from '@/types/database';
@@ -119,6 +123,8 @@ export default function AdminProductosPage() {
   const [debouncedBusqueda, setDebouncedBusqueda] = useState('');
   const [categoriaFiltro, setCategoriaFiltro] = useState('todas');
   const [showModalNuevo, setShowModalNuevo] = useState(false);
+  const [showModalExcel, setShowModalExcel] = useState(false);
+  const [showModalCategoria, setShowModalCategoria] = useState(false);
 
   // Paginación inteligente (20 productos por página)
   const [pagina, setPagina] = useState(1);
@@ -483,6 +489,28 @@ export default function AdminProductosPage() {
         </div>
 
         <div className="flex items-center gap-2.5">
+          <button
+            type="button"
+            onClick={() => setShowModalExcel(true)}
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200 hover:bg-emerald-100 shadow-xs transition-all cursor-pointer"
+            title="Importar o exportar stock masivamente desde Excel"
+          >
+            <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
+            <span className="hidden sm:inline">Excel Inventario</span>
+            <span className="sm:hidden">Excel</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setShowModalCategoria(true)}
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold bg-white text-zinc-800 border border-zinc-200 hover:bg-zinc-50 shadow-xs transition-all cursor-pointer"
+            title="Crear y administrar categorías de productos"
+          >
+            <FolderPlus className="w-3.5 h-3.5 text-zinc-700" />
+            <span className="hidden sm:inline">Nueva Categoría</span>
+            <span className="sm:hidden">Categorías</span>
+          </button>
+
           <button
             type="button"
             onClick={abrirModalNuevo}
@@ -866,21 +894,43 @@ export default function AdminProductosPage() {
                 </div>
 
                 <div>
-                  <label className="block font-semibold text-zinc-700 mb-1">Categoría *</label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="font-semibold text-zinc-700">Categoría *</label>
+                    <button
+                      type="button"
+                      onClick={() => setShowModalCategoria(true)}
+                      className="text-[11px] font-bold text-zinc-800 hover:text-black hover:underline flex items-center gap-1 cursor-pointer"
+                      title="Crear una nueva categoría para tus productos"
+                    >
+                      <Plus className="w-3 h-3 text-zinc-950" />
+                      <span>+ Nueva</span>
+                    </button>
+                  </div>
                   <select
                     value={categoriaId}
-                    onChange={(e) => setCategoriaId(e.target.value)}
+                    onChange={(e) => {
+                      if (e.target.value === '__NUEVA__') {
+                        setShowModalCategoria(true);
+                      } else {
+                        setCategoriaId(e.target.value);
+                      }
+                    }}
                     required
                     className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-50 border border-zinc-300 text-zinc-900 outline-none focus:border-black focus:bg-white transition-all text-xs cursor-pointer"
                   >
                     {categorias.length === 0 ? (
                       <option value="">Cargando categorías...</option>
                     ) : (
-                      categorias.map((c) => (
-                        <option key={c.id} value={c.id}>
-                          {c.nombre}
+                      <>
+                        {categorias.map((c) => (
+                          <option key={c.id} value={c.id}>
+                            {c.nombre}
+                          </option>
+                        ))}
+                        <option value="__NUEVA__" className="font-bold text-zinc-950 bg-zinc-100">
+                          ➕ Crear nueva categoría...
                         </option>
-                      ))
+                      </>
                     )}
                   </select>
                 </div>
@@ -1218,6 +1268,39 @@ export default function AdminProductosPage() {
           </div>
         </div>
       )}
+
+      {/* Modal de Importación / Exportación Masiva Excel */}
+      <ModalInventarioExcel
+        isOpen={showModalExcel}
+        onClose={() => setShowModalExcel(false)}
+        productos={productos}
+        onActualizacionExitosa={() => {
+          cargarDatos(pagina, false);
+          setSuccessToast('Inventario actualizado masivamente desde Excel.');
+          setTimeout(() => setSuccessToast(null), 4000);
+        }}
+      />
+
+      {/* Modal de Creación y Gestión de Categorías */}
+      <ModalGestionCategorias
+        isOpen={showModalCategoria}
+        onClose={() => setShowModalCategoria(false)}
+        categoriasExistentes={categorias}
+        onCategoriaCreada={(nuevaCat) => {
+          setCategorias((prev) => [...prev, nuevaCat]);
+          setCategoriaId(nuevaCat.id);
+          setSuccessToast(`¡Categoría "${nuevaCat.nombre}" creada y seleccionada!`);
+          setTimeout(() => setSuccessToast(null), 4000);
+        }}
+        onCategoriaEliminada={(catIdEliminada) => {
+          setCategorias((prev) => prev.filter((c) => c.id !== catIdEliminada));
+          if (categoriaId === catIdEliminada) {
+            setCategoriaId('');
+          }
+          setSuccessToast('Categoría eliminada correctamente del catálogo.');
+          setTimeout(() => setSuccessToast(null), 4000);
+        }}
+      />
     </div>
   );
 }
