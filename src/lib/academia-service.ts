@@ -469,7 +469,11 @@ export async function crearMatriculaCompleta(
     const codigoMatriculaGenerado = `MAT-2026-${randomSuffix}`;
 
     // C. Calcular saldo y registrar o actualizar Matrícula
-    const saldoInicial = Math.max(0, input.total_curso);
+    const totalCursoReal = Math.max(0, Number(input.total_curso) || 0) || (input.numero_cuotas === 0 ? (Number(input.monto_matricula_pagado) || 0) : 750);
+    const montoMatriculaReal = Math.max(0, Number(input.monto_matricula_pagado) || 0);
+    const saldoInicial = input.numero_cuotas === 0
+      ? 0
+      : Math.max(0, totalCursoReal - montoMatriculaReal);
 
     // Buscar si ya existía una matrícula provisional para este alumno
     const { data: matExistente } = await supabase
@@ -496,8 +500,8 @@ export async function crearMatriculaCompleta(
           fecha_matricula: new Date().toISOString().split('T')[0],
           fecha_inicio: input.fecha_inicio || new Date().toISOString().split('T')[0],
           estado: 'EN_CURSO',
-          monto_matricula_pagado: input.monto_matricula_pagado,
-          total_curso: input.total_curso,
+          monto_matricula_pagado: montoMatriculaReal,
+          total_curso: totalCursoReal,
           saldo_pendiente: saldoInicial,
           kit_entregado: false,
           fecha_entrega_kit: null,
@@ -524,8 +528,8 @@ export async function crearMatriculaCompleta(
           fecha_matricula: new Date().toISOString().split('T')[0],
           fecha_inicio: input.fecha_inicio || new Date().toISOString().split('T')[0],
           estado: 'EN_CURSO',
-          monto_matricula_pagado: input.monto_matricula_pagado,
-          total_curso: input.total_curso,
+          monto_matricula_pagado: montoMatriculaReal,
+          total_curso: totalCursoReal,
           saldo_pendiente: saldoInicial,
           kit_entregado: false,
           fecha_entrega_kit: null,
@@ -736,6 +740,144 @@ export async function actualizarSedeMatricula(
     return { ok: true };
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : 'Error al cambiar sede de matrícula';
+    return { ok: false, error: msg };
+  }
+}
+
+// -------------------------------------------------------------------------
+// 8.6 Actualizar plan financiero (costo total, contado vs cuotas)
+// -------------------------------------------------------------------------
+export interface ActualizarPlanFinancieroInput {
+  matriculaId: string;
+  total_curso: number;
+  monto_matricula_pagado: number;
+  modalidad: 'CONTADO' | 'CUOTAS';
+  numero_cuotas?: number;
+  fechas_vencimiento?: string[];
+}
+
+export async function actualizarPlanFinancieroMatricula(
+  input: ActualizarPlanFinancieroInput
+): Promise<{ ok: boolean; error?: string; cuotas?: CuotaMatricula[]; saldo_pendiente?: number }> {
+  try {
+    const totalCurso = Math.max(0, Number(input.total_curso) || 0);
+    const montoMatricula = Math.max(0, Number(input.monto_matricula_pagado) || 0);
+
+    if (input.modalidad === 'CONTADO') {
+      // 1. Matrícula liquidada al contado: saldo pendiente es 0
+      const { error: errMat } = await supabase
+        .from('matriculas')
+        .update({
+          total_curso: totalCurso,
+          monto_matricula_pagado: montoMatricula,
+          saldo_pendiente: 0,
+        })
+        .eq('id', input.matriculaId);
+
+      if (errMat) throw new Error(errMat.message);
+
+      // Eliminar cuotas pendientes (no pagadas) ya que fue liquidado al contado
+      await supabase
+        .from('cuotas_matricula')
+        .delete()
+        .eq('matricula_id', input.matriculaId)
+        .neq('estado', 'PAGADA');
+
+      const { data: cuotasRestantes } = await supabase
+        .from('cuotas_matricula')
+        .select('*')
+        .eq('matricula_id', input.matriculaId)
+        .order('numero_cuota', { ascending: true });
+
+      return {
+        ok: true,
+        saldo_pendiente: 0,
+        cuotas: (cuotasRestantes as CuotaMatricula[]) || [],
+      };
+    } else {
+      // 2. Modalidad en cuotas
+      const numCuotas = Math.max(1, input.numero_cuotas || 2);
+
+      // Obtener cuotas ya pagadas si las hubiera
+      const { data: cuotasPagadas } = await supabase
+        .from('cuotas_matricula')
+        .select('*')
+        .eq('matricula_id', input.matriculaId)
+        .eq('estado', 'PAGADA')
+        .order('numero_cuota', { ascending: true });
+
+      const totalPagadoEnCuotas = (cuotasPagadas || []).reduce((acc, c) => acc + (Number(c.monto) || 0), 0);
+      const totalAbonadoPrevio = montoMatricula + totalPagadoEnCuotas;
+      const saldoRestante = Math.max(0, totalCurso - totalAbonadoPrevio);
+
+      // Actualizar registro de la matrícula con el nuevo saldo
+      const { error: errMat } = await supabase
+        .from('matriculas')
+        .update({
+          total_curso: totalCurso,
+          monto_matricula_pagado: montoMatricula,
+          saldo_pendiente: saldoRestante,
+        })
+        .eq('id', input.matriculaId);
+
+      if (errMat) throw new Error(errMat.message);
+
+      // Eliminar cuotas pendientes o vencidas no pagadas para regenerar el cronograma
+      await supabase
+        .from('cuotas_matricula')
+        .delete()
+        .eq('matricula_id', input.matriculaId)
+        .neq('estado', 'PAGADA');
+
+      const cuotasNuevas: any[] = [];
+      if (saldoRestante > 0 && numCuotas > 0) {
+        const montoPorCuota = Math.round((saldoRestante / numCuotas) * 10) / 10;
+        const fechaBase = new Date();
+        const startIdx = (cuotasPagadas?.length || 0) + 1;
+
+        for (let i = 0; i < numCuotas; i++) {
+          let fechaStr = input.fechas_vencimiento && input.fechas_vencimiento[i];
+          if (!fechaStr) {
+            const fechaVence = new Date(fechaBase);
+            fechaVence.setDate(fechaVence.getDate() + 30 * (i + 1));
+            fechaStr = fechaVence.toISOString().split('T')[0];
+          }
+
+          cuotasNuevas.push({
+            matricula_id: input.matriculaId,
+            numero_cuota: startIdx + i,
+            monto: montoPorCuota,
+            fecha_vencimiento: fechaStr,
+            estado: 'PENDIENTE',
+          });
+        }
+
+        if (cuotasNuevas.length > 0) {
+          const { error: errInsert } = await supabase
+            .from('cuotas_matricula')
+            .insert(cuotasNuevas);
+
+          if (errInsert) {
+            console.warn('Error insertando cuotas nuevas:', errInsert);
+          }
+        }
+      }
+
+      // Obtener todas las cuotas actualizadas
+      const { data: todasCuotas } = await supabase
+        .from('cuotas_matricula')
+        .select('*')
+        .eq('matricula_id', input.matriculaId)
+        .order('numero_cuota', { ascending: true });
+
+      return {
+        ok: true,
+        saldo_pendiente: saldoRestante,
+        cuotas: (todasCuotas as CuotaMatricula[]) || [],
+      };
+    }
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : 'Error al actualizar plan financiero';
     return { ok: false, error: msg };
   }
 }
@@ -1094,3 +1236,55 @@ export async function eliminarMatriculaCompleta(
   }
 }
 
+// -------------------------------------------------------------------------
+// 12. Retirar alumno: condonar cuotas y registrar auditoría
+// -------------------------------------------------------------------------
+/**
+ * Procesa el retiro formal de un alumno:
+ * 1. Cambia estado de la matrícula a RETIRADO y guarda auditoría en notas
+ * 2. Marca todas las cuotas PENDIENTE/VENCIDA como CONDONADA
+ * 3. Pone saldo_pendiente en 0 (deuda condonada)
+ */
+export async function retirarMatricula(
+  matriculaId: string,
+  motivo: string,
+  usuarioNombre: string
+): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const fechaHoy = new Date().toLocaleDateString('es-PE', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+    });
+    const notaRetiro = `[RETIRO ${fechaHoy} — Procesado por: ${usuarioNombre}] Motivo: ${motivo || 'Sin motivo especificado'}`;
+
+    // 1. Actualizar estado a RETIRADO, guardar auditoría y zerear saldo
+    const { error: errEstado } = await supabase
+      .from('matriculas')
+      .update({
+        estado: 'RETIRADO',
+        notas: notaRetiro,
+        saldo_pendiente: 0,
+      })
+      .eq('id', matriculaId);
+
+    if (errEstado) throw new Error(errEstado.message);
+
+    // 2. Condonar todas las cuotas pendientes o vencidas
+    const { error: errCuotas } = await supabase
+      .from('cuotas_matricula')
+      .update({ estado: 'CONDONADA' })
+      .eq('matricula_id', matriculaId)
+      .in('estado', ['PENDIENTE', 'VENCIDA']);
+
+    if (errCuotas) {
+      console.warn('Advertencia: no se pudieron condonar cuotas:', errCuotas.message);
+    }
+
+    return { ok: true };
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : 'Error inesperado al procesar el retiro';
+    console.error('Error en retirarMatricula:', msg);
+    return { ok: false, error: msg };
+  }
+}

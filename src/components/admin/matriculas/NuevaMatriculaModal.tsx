@@ -85,13 +85,17 @@ export function NuevaMatriculaModal({
   };
 
   // Cálculos automáticos
-  const saldoPendiente = Math.max(0, totalCurso - montoMatricula);
+  const saldoPendiente = numeroCuotas === 0 ? 0 : Math.max(0, totalCurso - montoMatricula);
   const montoPorCuota = numeroCuotas > 0 ? Math.round((saldoPendiente / numeroCuotas) * 10) / 10 : 0;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg(null);
 
+    if (!totalCurso || totalCurso <= 0) {
+      setErrorMsg('Por favor ingresa un costo total válido para el curso.');
+      return;
+    }
     if (!dni || dni.length < 8) {
       setErrorMsg('El DNI debe tener 8 dígitos válidos.');
       return;
@@ -455,12 +459,16 @@ export function NuevaMatriculaModal({
                 <span className="font-mono font-bold text-zinc-900 text-sm">
                   {formatCurrency(saldoPendiente)}
                 </span>
-                {numeroCuotas > 0 && saldoPendiente > 0 && (
+                {numeroCuotas > 0 && saldoPendiente > 0 ? (
                   <p className="text-[11px] text-zinc-500 mt-0.5">
                     Se generarán <strong className="text-zinc-800">{numeroCuotas} cuotas</strong> de{' '}
                     <strong className="text-zinc-900 font-mono">{formatCurrency(montoPorCuota)}</strong> cada 30 días.
                   </p>
-                )}
+                ) : numeroCuotas === 0 ? (
+                  <p className="text-[11px] text-emerald-700 font-medium mt-0.5">
+                    ✓ Pago al contado: Curso liquidado en su totalidad. Saldo pendiente: S/ 0.00.
+                  </p>
+                ) : null}
               </div>
 
               <div className="flex items-center gap-2 w-full sm:w-auto">

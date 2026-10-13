@@ -5,7 +5,7 @@
 import { supabase } from '@/lib/supabase';
 import { SEDES, SedeId, BUSINESS_INFO } from '@/lib/constants';
 import { formatCurrency } from '@/lib/utils';
-import { crearMatriculaCompleta, matchSede } from '@/lib/academia-service';
+import { crearMatriculaCompleta, matchSede, retirarMatricula } from '@/lib/academia-service';
 import { Alumno, Matricula } from '@/types/database';
 
 export interface PedidoItemDetallado {
@@ -82,8 +82,10 @@ function inferirCanalYSede(row: any, items: PedidoItemDetallado[] = []): { canal
 
   // Canal
   const tieneMatricula =
-    row.es_alumno ||
+    Boolean(row.es_alumno) ||
+    codigo.startsWith('MAT-') ||
     items.some((it) =>
+      Boolean(it.es_matricula) ||
       it.nombre_producto.toLowerCase().includes('matrícula') ||
       it.nombre_producto.toLowerCase().includes('matricula') ||
       it.nombre_producto.toLowerCase().includes('barbería integral') ||
@@ -92,7 +94,7 @@ function inferirCanalYSede(row: any, items: PedidoItemDetallado[] = []): { canal
 
   let canal: 'WEB_TIENDA' | 'ACADEMIA' | 'POS_MOSTRADOR' = 'WEB_TIENDA';
 
-  if (codigo.startsWith('POS-') || notas.includes('mostrador') || notas.includes('pos')) {
+  if (codigo.startsWith('POS-') || notas.includes('mostrador') || /\bpos\b/i.test(notas)) {
     canal = 'POS_MOSTRADOR';
   } else if (tieneMatricula) {
     canal = 'ACADEMIA';
@@ -104,57 +106,79 @@ function inferirCanalYSede(row: any, items: PedidoItemDetallado[] = []): { canal
 }
 
 /**
- * Obtener listado de pedidos con filtros avanzados para el panel administrativo
+ * Obtener listado consolidado de ventas y pedidos para el panel administrativo:
+ * 1. Ventas Mostrador (POS)
+ * 2. Pedidos Tienda Web (Supply / E-commerce)
+ * 3. Academia & Matrículas (Inscripciones de alumnos y pagos de cuotas)
  */
 export async function getPedidosAdmin(filtros?: FiltrosPedidosAdmin): Promise<PedidoCompleto[]> {
   try {
-    let query = supabase
+    // 1. Consultar pedidos en Supabase (POS mostrador y Tienda Web)
+    let pedidosQuery = supabase
       .from('pedidos')
       .select('*')
       .order('creado_en', { ascending: false });
 
     if (filtros?.estado && filtros.estado !== 'TODOS') {
-      query = query.eq('estado', filtros.estado);
+      pedidosQuery = pedidosQuery.eq('estado', filtros.estado);
     }
 
-    const { data: pedidosRows, error: pedError } = await query;
+    // 2. Consultar Matrículas oficiales de Academia
+    let matriculasQuery = supabase
+      .from('matriculas')
+      .select('*')
+      .order('creado_en', { ascending: false });
 
-    if (pedError || !pedidosRows) {
-      console.warn('Error al consultar pedidos:', pedError);
-      return [];
-    }
+    // 3. Consultar Pagos de Cuotas de Academia (estado PAGADA)
+    let cuotasQuery = supabase
+      .from('cuotas_matricula')
+      .select('*')
+      .eq('estado', 'PAGADA')
+      .order('fecha_pago', { ascending: false });
 
-    if (pedidosRows.length === 0) return [];
+    // Ejecutar las 3 consultas en paralelo
+    const [pedidosRes, matriculasRes, cuotasRes] = await Promise.all([
+      pedidosQuery,
+      matriculasQuery,
+      cuotasQuery,
+    ]);
+
+    const pedidosRows = pedidosRes.data || [];
+    const matriculasRows = matriculasRes.data || [];
+    const cuotasRows = cuotasRes.data || [];
 
     // Obtener ítems de todos los pedidos consultados
     const pedidoIds = pedidosRows.map((p) => p.id);
-    const { data: itemsRows } = await supabase
-      .from('pedido_items')
-      .select('*')
-      .in('pedido_id', pedidoIds);
-
-    const itemsMap: Record<string, PedidoItemDetallado[]> = {};
-    if (itemsRows) {
-      itemsRows.forEach((item: any) => {
-        if (!itemsMap[item.pedido_id]) itemsMap[item.pedido_id] = [];
-        const esMatricula =
-          item.nombre_producto.toLowerCase().includes('matrícula') ||
-          item.nombre_producto.toLowerCase().includes('matricula');
-        itemsMap[item.pedido_id].push({
-          id: item.id,
-          pedido_id: item.pedido_id,
-          producto_id: item.producto_id,
-          nombre_producto: item.nombre_producto,
-          precio_unitario: Number(item.precio_unitario) || 0,
-          cantidad: Number(item.cantidad) || 1,
-          subtotal: Number(item.subtotal) || 0,
-          es_matricula: esMatricula,
-        });
-      });
+    let itemsRows: any[] = [];
+    if (pedidoIds.length > 0) {
+      const { data } = await supabase
+        .from('pedido_items')
+        .select('*')
+        .in('pedido_id', pedidoIds);
+      itemsRows = data || [];
     }
 
-    // Mapear y enriquecer
-    let resultado: PedidoCompleto[] = pedidosRows.map((row) => {
+    const itemsMap: Record<string, PedidoItemDetallado[]> = {};
+    itemsRows.forEach((item: any) => {
+      if (!itemsMap[item.pedido_id]) itemsMap[item.pedido_id] = [];
+      const esMatricula =
+        Boolean(item.es_matricula) ||
+        item.nombre_producto.toLowerCase().includes('matrícula') ||
+        item.nombre_producto.toLowerCase().includes('matricula');
+      itemsMap[item.pedido_id].push({
+        id: item.id,
+        pedido_id: item.pedido_id,
+        producto_id: item.producto_id,
+        nombre_producto: item.nombre_producto,
+        precio_unitario: Number(item.precio_unitario) || 0,
+        cantidad: Number(item.cantidad) || 1,
+        subtotal: Number(item.subtotal) || 0,
+        es_matricula: esMatricula,
+      });
+    });
+
+    // Mapear pedidos (POS y Web)
+    const pedidosMapped: PedidoCompleto[] = pedidosRows.map((row) => {
       const items = itemsMap[row.id] || [];
       const { canal, sede, sedeId } = inferirCanalYSede(row, items);
 
@@ -183,9 +207,147 @@ export async function getPedidosAdmin(filtros?: FiltrosPedidosAdmin): Promise<Pe
       };
     });
 
+    // ── Enriquecer Matrículas con Alumnos ──────────────────────────────────
+    const alumnoIds = Array.from(
+      new Set(matriculasRows.map((m: any) => m.alumno_id).filter(Boolean))
+    );
+    const alumnosMap: Record<string, any> = {};
+    if (alumnoIds.length > 0) {
+      const { data: alumnosData } = await supabase
+        .from('alumnos')
+        .select('id, dni, nombres, apellidos, celular, email, distrito')
+        .in('id', alumnoIds);
+      (alumnosData || []).forEach((a: any) => {
+        alumnosMap[a.id] = a;
+      });
+    }
+
+    const matriculasMapped: PedidoCompleto[] = matriculasRows.map((m: any) => {
+      const a = alumnosMap[m.alumno_id] || {};
+      const alumnoNombre = `${a.nombres || ''} ${a.apellidos || ''}`.trim() || 'Estudiante Academia';
+      const esHuancayo = matchSede(m.sede, 'huancayo');
+      const sedeNombre = esHuancayo ? SEDES.huancayo.nombre : SEDES.ica.nombre;
+      const sedeId: 'ica' | 'huancayo' = esHuancayo ? 'huancayo' : 'ica';
+      const montoPagado = Number(m.monto_matricula_pagado || 0);
+
+      let estado: 'PENDIENTE' | 'PAGADO' | 'ENTREGADO' | 'CANCELADO' = 'PAGADO';
+      if (m.estado === 'RETIRADO') {
+        estado = 'CANCELADO';
+      } else if (Number(m.saldo_pendiente || 0) <= 0) {
+        estado = 'ENTREGADO';
+      } else if (montoPagado > 0) {
+        estado = 'PAGADO';
+      } else {
+        estado = 'PENDIENTE';
+      }
+
+      const items: PedidoItemDetallado[] = [
+        {
+          id: m.id,
+          pedido_id: m.id,
+          producto_id: m.curso_id,
+          nombre_producto: `Matrícula: ${m.curso_nombre || 'Curso'} (${m.turno || 'Regular'})`,
+          precio_unitario: montoPagado,
+          cantidad: 1,
+          subtotal: montoPagado,
+          es_matricula: true,
+        },
+      ];
+
+      return {
+        id: m.id,
+        codigo_pedido: m.codigo_matricula || `MAT-${String(m.id).slice(0, 6)}`,
+        cliente_nombre: alumnoNombre,
+        cliente_telefono: a.celular || '',
+        cliente_dni: a.dni || '',
+        ciudad: m.sede || (esHuancayo ? 'Huancayo' : 'Ica'),
+        sede_id: sedeId,
+        metodo_entrega: 'ACADEMIA',
+        metodo_pago: 'EFECTIVO',
+        estado,
+        subtotal: montoPagado,
+        costo_envio: 0,
+        descuento: 0,
+        total: montoPagado,
+        es_alumno: true,
+        notas: `Matrícula: ${m.curso_nombre || 'Curso'}. Turno: ${m.turno || 'Regular'}. Total curso: S/ ${Number(m.total_curso || 0).toFixed(2)}. Saldo pendiente: S/ ${Number(m.saldo_pendiente || 0).toFixed(2)}${m.notas ? ` • ${m.notas}` : ''}`,
+        creado_en: m.creado_en || (m.fecha_matricula ? `${m.fecha_matricula}T12:00:00.000Z` : new Date().toISOString()),
+        actualizado_en: m.creado_en,
+        items,
+        tipo_canal: 'ACADEMIA' as const,
+        sede_nombre: sedeNombre,
+      };
+    });
+
+    // ── Enriquecer Cuotas Pagadas de Academia ──────────────────────────────
+    const matsMap: Record<string, any> = {};
+    matriculasRows.forEach((m: any) => { matsMap[m.id] = m; });
+
+    const cuotasMapped: PedidoCompleto[] = cuotasRows.map((c: any) => {
+      const mat = matsMap[c.matricula_id] || {};
+      const a = alumnosMap[mat.alumno_id] || {};
+      const alumnoNombre = `${a.nombres || ''} ${a.apellidos || ''}`.trim() || 'Estudiante Academia';
+      const esHuancayo = matchSede(mat.sede, 'huancayo');
+      const sedeNombre = esHuancayo ? SEDES.huancayo.nombre : SEDES.ica.nombre;
+      const sedeId: 'ica' | 'huancayo' = esHuancayo ? 'huancayo' : 'ica';
+      const monto = Number(c.monto || 0);
+
+      const items: PedidoItemDetallado[] = [
+        {
+          id: c.id,
+          pedido_id: c.id,
+          producto_id: mat.curso_id,
+          nombre_producto: `Cuota #${c.numero_cuota} — ${mat.curso_nombre || 'Curso'}`,
+          precio_unitario: monto,
+          cantidad: 1,
+          subtotal: monto,
+          es_matricula: true,
+        },
+      ];
+
+      return {
+        id: c.id,
+        codigo_pedido: `${mat.codigo_matricula || 'MAT'}-C${c.numero_cuota}`,
+        cliente_nombre: alumnoNombre,
+        cliente_telefono: a.celular || '',
+        cliente_dni: a.dni || '',
+        ciudad: mat.sede || (esHuancayo ? 'Huancayo' : 'Ica'),
+        sede_id: sedeId,
+        metodo_entrega: 'ACADEMIA',
+        metodo_pago: c.metodo_pago || 'EFECTIVO',
+        estado: 'ENTREGADO' as const,
+        subtotal: monto,
+        costo_envio: 0,
+        descuento: 0,
+        total: monto,
+        es_alumno: true,
+        notas: `Pago de Cuota #${c.numero_cuota} — ${mat.curso_nombre || 'Curso'}.${c.numero_operacion ? ` N° Operación: ${c.numero_operacion}` : ''}`,
+        creado_en: c.fecha_pago || c.creado_en || new Date().toISOString(),
+        actualizado_en: c.fecha_pago,
+        items,
+        tipo_canal: 'ACADEMIA' as const,
+        sede_nombre: sedeNombre,
+      };
+    });
+
+    // ── Combinar y deduplicar por código ──────────────────────────────────
+    const existingCodes = new Set(pedidosMapped.map((p) => p.codigo_pedido));
+    const nuevasMatriculas = matriculasMapped.filter((m) => !existingCodes.has(m.codigo_pedido));
+    const nuevasCuotas = cuotasMapped.filter((c) => !existingCodes.has(c.codigo_pedido));
+
+    let resultado: PedidoCompleto[] = [
+      ...pedidosMapped,
+      ...nuevasMatriculas,
+      ...nuevasCuotas,
+    ].sort((a, b) => new Date(b.creado_en).getTime() - new Date(a.creado_en).getTime());
+
     // Filtros en memoria para canal, sede y texto de búsqueda
     if (filtros?.canal && filtros.canal !== 'TODOS') {
       resultado = resultado.filter((p) => p.tipo_canal === filtros.canal);
+    }
+
+    if (filtros?.estado && filtros.estado !== 'TODOS') {
+      resultado = resultado.filter((p) => p.estado === filtros.estado);
     }
 
     // Filtro de sede estricto
@@ -212,7 +374,8 @@ export async function getPedidosAdmin(filtros?: FiltrosPedidosAdmin): Promise<Pe
           p.cliente_nombre.toLowerCase().includes(q) ||
           p.cliente_telefono.includes(q) ||
           (p.cliente_dni && p.cliente_dni.includes(q)) ||
-          p.items.some((it) => it.nombre_producto.toLowerCase().includes(q))
+          p.items.some((it) => it.nombre_producto.toLowerCase().includes(q)) ||
+          (p.notas && p.notas.toLowerCase().includes(q))
       );
     }
 
@@ -266,25 +429,49 @@ export async function getEstadisticasPedidos(sedeId?: string): Promise<Estadisti
 }
 
 /**
- * Actualizar el estado de un pedido en Supabase
+ * Actualizar el estado de un pedido o matrícula en Supabase
  */
 export async function actualizarEstadoPedido(
   pedidoId: string,
   nuevoEstado: 'PENDIENTE' | 'PAGADO' | 'ENTREGADO' | 'CANCELADO'
 ): Promise<{ ok: boolean; error?: string }> {
   try {
-    const { error } = await supabase
+    const { data: pedExistente } = await supabase
       .from('pedidos')
-      .update({
-        estado: nuevoEstado,
-        actualizado_en: new Date().toISOString(),
-      })
-      .eq('id', pedidoId);
+      .select('id')
+      .eq('id', pedidoId)
+      .maybeSingle();
 
-    if (error) throw new Error(error.message);
+    if (pedExistente) {
+      const { error } = await supabase
+        .from('pedidos')
+        .update({
+          estado: nuevoEstado,
+          actualizado_en: new Date().toISOString(),
+        })
+        .eq('id', pedidoId);
+
+      if (error) throw new Error(error.message);
+    } else {
+      // Si es una matrícula
+      const { data: matExistente } = await supabase
+        .from('matriculas')
+        .select('id')
+        .eq('id', pedidoId)
+        .maybeSingle();
+
+      if (matExistente) {
+        const estadoMat = nuevoEstado === 'CANCELADO' ? 'RETIRADO' : 'EN_CURSO';
+        await supabase
+          .from('matriculas')
+          .update({ estado: estadoMat })
+          .eq('id', pedidoId);
+      }
+    }
 
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new Event('galindo_pedido_web_realizado'));
+      window.dispatchEvent(new Event('galindo_matricula_registrada'));
     }
 
     return { ok: true };
@@ -308,9 +495,22 @@ export async function anularPedidoConKardex(
       .from('pedidos')
       .select('id, codigo_pedido, total, notas, sede_id, ciudad, estado, metodo_pago')
       .eq('id', pedidoId)
-      .single();
+      .maybeSingle();
 
-    if (pedErr || !pedido) throw new Error('Pedido no encontrado en la base de datos.');
+    if (pedErr || !pedido) {
+      // ¿Es una matrícula de Academia?
+      const { data: mat } = await supabase
+        .from('matriculas')
+        .select('id, codigo_matricula, estado')
+        .eq('id', pedidoId)
+        .maybeSingle();
+
+      if (mat) {
+        return await retirarMatricula(mat.id, motivo, responsable);
+      }
+      throw new Error('Pedido o matrícula no encontrado en la base de datos.');
+    }
+
     if (pedido.estado === 'CANCELADO') throw new Error('Este pedido ya se encuentra anulado.');
 
     const { data: items } = await supabase

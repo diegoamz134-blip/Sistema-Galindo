@@ -14,10 +14,22 @@ import {
   CheckCircle2,
   MapPin,
   ShieldAlert,
+  XCircle,
+  Ban,
+  SlidersHorizontal,
+  Check,
 } from 'lucide-react';
-import { MatriculaConDetalle, actualizarEstadoAcademico, actualizarSedeMatricula, matchSede } from '@/lib/academia-service';
+import {
+  MatriculaConDetalle,
+  actualizarEstadoAcademico,
+  actualizarSedeMatricula,
+  actualizarPlanFinancieroMatricula,
+  matchSede,
+  retirarMatricula,
+} from '@/lib/academia-service';
 import { CuotaMatricula, EstadoAcademico } from '@/types/database';
 import { formatCurrency, formatDate } from '@/lib/utils';
+import { useAuth } from '@/context/AuthContext';
 import { RegistrarPagoCuotaModal } from './RegistrarPagoCuotaModal';
 import { ReciboMatriculaTicket } from './ReciboMatriculaTicket';
 
@@ -34,10 +46,24 @@ export function DetalleAlumnoModal({
   matricula,
   onUpdate,
 }: DetalleAlumnoModalProps) {
+  const { userMeta } = useAuth();
   const [currentMatricula, setCurrentMatricula] = useState<MatriculaConDetalle>(matricula);
   const [cuotaACobrar, setCuotaACobrar] = useState<CuotaMatricula | null>(null);
   const [verTicket, setVerTicket] = useState(false);
   const [actualizandoEstado, setActualizandoEstado] = useState(false);
+
+  // Estado para el flujo de confirmación de retiro
+  const [retiroModalOpen, setRetiroModalOpen] = useState(false);
+  const [motivoRetiro, setMotivoRetiro] = useState('');
+
+  // Estado para el modal de edición de plan financiero
+  const [editarPlanOpen, setEditarPlanOpen] = useState(false);
+  const [nuevoTotalCurso, setNuevoTotalCurso] = useState<number>(0);
+  const [nuevoMontoMatricula, setNuevoMontoMatricula] = useState<number>(0);
+  const [modalidadPlan, setModalidadPlan] = useState<'CONTADO' | 'CUOTAS'>('CONTADO');
+  const [numCuotasEditar, setNumCuotasEditar] = useState<number>(2);
+  const [guardandoPlan, setGuardandoPlan] = useState<boolean>(false);
+  const [errorPlan, setErrorPlan] = useState<string | null>(null);
 
   // Sincronizar si cambia el prop
   useEffect(() => {
@@ -46,15 +72,44 @@ export function DetalleAlumnoModal({
 
   if (!isOpen) return null;
 
+  const usuarioNombre = userMeta?.nombre || 'Administrador';
+  const esRetirado = currentMatricula.estado === 'RETIRADO';
+
+  // Intercepta el cambio de estado: si es RETIRADO, abre confirmación
   const handleEstadoChange = async (nuevoEstado: EstadoAcademico) => {
+    if (nuevoEstado === 'RETIRADO') {
+      setRetiroModalOpen(true);
+      return;
+    }
     setActualizandoEstado(true);
-    // Actualización inmediata en pantalla (optimista)
-    setCurrentMatricula((prev) => ({
-      ...prev,
-      estado: nuevoEstado,
-    }));
+    setCurrentMatricula((prev) => ({ ...prev, estado: nuevoEstado }));
     await actualizarEstadoAcademico(currentMatricula.id, nuevoEstado);
     onUpdate();
+    setActualizandoEstado(false);
+  };
+
+  // Confirmar el retiro formal con condonación de cuotas
+  const handleConfirmarRetiro = async () => {
+    setActualizandoEstado(true);
+    const resultado = await retirarMatricula(currentMatricula.id, motivoRetiro, usuarioNombre);
+    if (resultado.ok) {
+      // Actualizar UI localmente: marcar cuotas pendientes como condonadas
+      setCurrentMatricula((prev) => ({
+        ...prev,
+        estado: 'RETIRADO',
+        saldo_pendiente: 0,
+        cuotas: (prev.cuotas || []).map((c) =>
+          c.estado === 'PENDIENTE' || c.estado === 'VENCIDA'
+            ? { ...c, estado: 'CONDONADA' as const }
+            : c
+        ),
+      }));
+      onUpdate();
+    } else {
+      alert(`Error al procesar el retiro: ${resultado.error}`);
+    }
+    setRetiroModalOpen(false);
+    setMotivoRetiro('');
     setActualizandoEstado(false);
   };
 
@@ -84,11 +139,76 @@ export function DetalleAlumnoModal({
     window.open(`https://wa.me/51${telefono}?text=${mensaje}`, '_blank');
   };
 
-  const totalAbonado =
-    (Number(currentMatricula.monto_matricula_pagado) || 0) +
-    (currentMatricula.cuotas || [])
-      .filter((c) => c.estado === 'PAGADA')
-      .reduce((acc, c) => acc + (Number(c.monto) || 0), 0);
+  // ── Cálculos Financieros Robustos ─────────────────────────────────────
+  const costoCursoEfectivo =
+    Number(currentMatricula.total_curso) > 0
+      ? Number(currentMatricula.total_curso)
+      : (Number(currentMatricula.curso?.costo_total_contado) ||
+         Number(currentMatricula.curso?.costo_mensualidad) ||
+         Number(currentMatricula.monto_matricula_pagado) || 0);
+
+  const pagadoMatricula = Number(currentMatricula.monto_matricula_pagado) || 0;
+  const cuotasPagadasSuma = (currentMatricula.cuotas || [])
+    .filter((c) => c.estado === 'PAGADA')
+    .reduce((acc, c) => acc + (Number(c.monto) || 0), 0);
+
+  const tieneCuotas = Boolean(currentMatricula.cuotas && currentMatricula.cuotas.length > 0);
+  const saldoPendienteBD = Number(currentMatricula.saldo_pendiente) || 0;
+
+  // Se considera liquidado al contado si no existen cuotas pendientes de pago y el saldo en BD es 0
+  const esLiquidadoContado =
+    (!tieneCuotas || currentMatricula.cuotas.every((c) => c.estado === 'PAGADA' || c.estado === 'CONDONADA')) &&
+    saldoPendienteBD <= 0;
+
+  // En liquidación al contado, todo el costo del curso fue abonado
+  const totalAbonado = esLiquidadoContado
+    ? Math.max(costoCursoEfectivo, pagadoMatricula + cuotasPagadasSuma)
+    : (pagadoMatricula + cuotasPagadasSuma);
+
+  const saldoEfectivo = esLiquidadoContado ? 0 : Math.max(0, costoCursoEfectivo - totalAbonado);
+  const montoCursoLiquidadoContado = Math.max(0, costoCursoEfectivo - pagadoMatricula);
+
+  const handleAbrirEditarPlan = () => {
+    setNuevoTotalCurso(costoCursoEfectivo);
+    setNuevoMontoMatricula(pagadoMatricula);
+    setModalidadPlan(esLiquidadoContado ? 'CONTADO' : 'CUOTAS');
+    setNumCuotasEditar(currentMatricula.cuotas && currentMatricula.cuotas.length > 0 ? currentMatricula.cuotas.length : 2);
+    setErrorPlan(null);
+    setEditarPlanOpen(true);
+  };
+
+  const handleGuardarPlanFinanciero = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (nuevoTotalCurso <= 0) {
+      setErrorPlan('El costo total del curso debe ser mayor a S/ 0.');
+      return;
+    }
+    setGuardandoPlan(true);
+    setErrorPlan(null);
+
+    const res = await actualizarPlanFinancieroMatricula({
+      matriculaId: currentMatricula.id,
+      total_curso: nuevoTotalCurso,
+      monto_matricula_pagado: nuevoMontoMatricula,
+      modalidad: modalidadPlan,
+      numero_cuotas: modalidadPlan === 'CUOTAS' ? numCuotasEditar : 0,
+    });
+
+    if (res.ok) {
+      setCurrentMatricula((prev) => ({
+        ...prev,
+        total_curso: nuevoTotalCurso,
+        monto_matricula_pagado: nuevoMontoMatricula,
+        saldo_pendiente: res.saldo_pendiente ?? (modalidadPlan === 'CONTADO' ? 0 : Math.max(0, nuevoTotalCurso - nuevoMontoMatricula)),
+        cuotas: res.cuotas || [],
+      }));
+      setEditarPlanOpen(false);
+      onUpdate();
+    } else {
+      setErrorPlan(res.error || 'Error al guardar los cambios en el plan financiero');
+    }
+    setGuardandoPlan(false);
+  };
 
   return (
     <>
@@ -202,15 +322,26 @@ export function DetalleAlumnoModal({
 
             {/* Resumen Financiero y Cronograma de Cuotas */}
             <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <h4 className="font-bold text-zinc-950 uppercase tracking-wider text-xs flex items-center gap-1.5">
-                  <DollarSign className="w-4 h-4 text-emerald-600" />
-                  <span>Cronograma de Cuotas & Pagos</span>
-                </h4>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <h4 className="font-bold text-zinc-950 uppercase tracking-wider text-xs flex items-center gap-1.5">
+                    <DollarSign className="w-4 h-4 text-emerald-600" />
+                    <span>Cronograma de Cuotas & Pagos</span>
+                  </h4>
+                  <button
+                    type="button"
+                    onClick={handleAbrirEditarPlan}
+                    className="px-2.5 py-1 rounded-lg bg-zinc-100 hover:bg-zinc-200 text-zinc-800 font-bold text-[11px] flex items-center gap-1.5 transition-colors border border-zinc-200 cursor-pointer active:scale-95 shadow-2xs"
+                    title="Ajustar costo total, modalidad al contado o generar cuotas"
+                  >
+                    <SlidersHorizontal className="w-3.5 h-3.5 text-zinc-600" />
+                    <span>Editar Costo & Cuotas</span>
+                  </button>
+                </div>
 
-                <div className="flex items-center gap-3 text-xs">
+                <div className="flex items-center gap-2.5 text-xs">
                   <span className="text-zinc-500">
-                    Total Curso: <strong className="font-mono text-zinc-900">{formatCurrency(currentMatricula.total_curso)}</strong>
+                    Total Curso: <strong className="font-mono text-zinc-900">{formatCurrency(costoCursoEfectivo)}</strong>
                   </span>
                   <span className="text-zinc-300">•</span>
                   <span className="text-zinc-500">
@@ -218,12 +349,12 @@ export function DetalleAlumnoModal({
                   </span>
                   <span className="text-zinc-300">•</span>
                   <span className="text-zinc-500">
-                    Saldo: <strong className="font-mono text-amber-600">{formatCurrency(currentMatricula.saldo_pendiente)}</strong>
+                    Saldo: <strong className="font-mono text-amber-600">{formatCurrency(saldoEfectivo)}</strong>
                   </span>
                 </div>
               </div>
 
-              {/* Lista de Cuotas */}
+              {/* Lista de Cuotas y Pagos */}
               <div className="border border-zinc-200 rounded-xl overflow-hidden">
                 <table className="w-full text-left text-xs">
                   <thead className="bg-zinc-100 text-zinc-500 uppercase tracking-wider text-[10px]">
@@ -236,7 +367,7 @@ export function DetalleAlumnoModal({
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-zinc-100">
-                    {/* Fila Fija: Matrícula Inicial */}
+                    {/* Fila Fija 1: Matrícula Inicial */}
                     <tr className="bg-emerald-50/40">
                       <td className="px-3 py-2.5 font-bold text-zinc-900">
                         Matrícula Inicial
@@ -245,7 +376,7 @@ export function DetalleAlumnoModal({
                         {formatDate(currentMatricula.fecha_matricula)}
                       </td>
                       <td className="px-3 py-2.5 font-mono font-bold text-zinc-900">
-                        {formatCurrency(currentMatricula.monto_matricula_pagado)}
+                        {formatCurrency(pagadoMatricula)}
                       </td>
                       <td className="px-3 py-2.5">
                         <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
@@ -257,11 +388,52 @@ export function DetalleAlumnoModal({
                       </td>
                     </tr>
 
-                    {/* Cuotas Mensuales */}
-                    {currentMatricula.cuotas && currentMatricula.cuotas.length > 0 ? (
+                    {/* Caso A: Si el curso fue liquidado al contado en un solo pago */}
+                    {esLiquidadoContado && (
+                      <>
+                        {montoCursoLiquidadoContado > 0 && (
+                          <tr className="bg-emerald-50/20">
+                            <td className="px-3 py-2.5 font-bold text-zinc-900 flex items-center gap-1.5">
+                              <Check className="w-3.5 h-3.5 text-emerald-600" />
+                              <span>Liquidación de Curso al Contado</span>
+                            </td>
+                            <td className="px-3 py-2.5 text-zinc-500 font-mono">
+                              {formatDate(currentMatricula.fecha_matricula)}
+                            </td>
+                            <td className="px-3 py-2.5 font-mono font-bold text-emerald-700">
+                              {formatCurrency(montoCursoLiquidadoContado)}
+                            </td>
+                            <td className="px-3 py-2.5">
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                                PAGADA (CONTADO)
+                              </span>
+                            </td>
+                            <td className="px-3 py-2.5 text-right text-zinc-500 font-mono text-[11px]">
+                              Cancelación Total
+                            </td>
+                          </tr>
+                        )}
+                        <tr>
+                          <td colSpan={5} className="px-4 py-3 bg-emerald-50/50 text-center border-t border-emerald-100">
+                            <div className="flex items-center justify-center gap-2 text-emerald-900 font-semibold text-xs">
+                              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                              <span>
+                                Este curso fue <strong>liquidado en un solo pago de contado</strong> por un valor total de <strong>{formatCurrency(totalAbonado)}</strong>. No hay cuotas pendientes.
+                              </span>
+                            </div>
+                          </td>
+                        </tr>
+                      </>
+                    )}
+
+                    {/* Caso B: Cronograma en Cuotas Mensuales */}
+                    {!esLiquidadoContado && currentMatricula.cuotas && currentMatricula.cuotas.length > 0 ? (
                       currentMatricula.cuotas.map((cuota) => {
                         const esPagada = cuota.estado === 'PAGADA';
                         const esVencida = cuota.estado === 'VENCIDA';
+                        const esCondonada = cuota.estado === 'CONDONADA';
+                        // Bloquear cobro si el alumno está retirado o la cuota fue condonada
+                        const bloquearCobro = esRetirado || esCondonada;
 
                         return (
                           <tr key={cuota.id} className="hover:bg-zinc-50">
@@ -279,6 +451,10 @@ export function DetalleAlumnoModal({
                                 <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
                                   PAGADA ({cuota.metodo_pago || 'PAGO'})
                                 </span>
+                              ) : esCondonada ? (
+                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-zinc-100 text-zinc-500 border border-zinc-200">
+                                  CONDONADA
+                                </span>
                               ) : esVencida ? (
                                 <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800 border border-rose-200">
                                   VENCIDA
@@ -294,6 +470,12 @@ export function DetalleAlumnoModal({
                                 <span className="text-[11px] text-zinc-400 font-mono">
                                   {cuota.fecha_pago ? formatDate(cuota.fecha_pago) : 'Liquidada'}
                                 </span>
+                              ) : esCondonada ? (
+                                <span className="text-[11px] text-zinc-400 font-mono">Retiro</span>
+                              ) : bloquearCobro ? (
+                                <span className="text-[11px] text-zinc-400 font-mono flex items-center justify-end gap-1">
+                                  <Ban className="w-3 h-3" /> Bloqueado
+                                </span>
                               ) : (
                                 <button
                                   type="button"
@@ -307,13 +489,22 @@ export function DetalleAlumnoModal({
                           </tr>
                         );
                       })
-                    ) : (
+                    ) : !esLiquidadoContado ? (
                       <tr>
-                        <td colSpan={5} className="px-3 py-4 text-center text-zinc-400">
-                          Este curso fue liquidado en un solo pago de contado. No hay cuotas pendientes.
+                        <td colSpan={5} className="px-4 py-5 text-center text-zinc-500">
+                          <p className="font-semibold text-xs text-zinc-700">No hay cuotas programadas para este alumno.</p>
+                          <p className="text-[11px] text-zinc-400 mt-0.5 mb-2">Haz clic en el botón de abajo para generar las cuotas mensuales.</p>
+                          <button
+                            type="button"
+                            onClick={handleAbrirEditarPlan}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-black text-white text-xs font-bold hover:bg-zinc-800 transition-colors cursor-pointer"
+                          >
+                            <SlidersHorizontal className="w-3.5 h-3.5" />
+                            <span>Generar Cuotas Mensuales</span>
+                          </button>
                         </td>
                       </tr>
-                    )}
+                    ) : null}
                   </tbody>
                 </table>
               </div>
@@ -366,6 +557,280 @@ export function DetalleAlumnoModal({
           onClose={() => setVerTicket(false)}
           matricula={currentMatricula}
         />
+      )}
+
+      {/* ── Modal de Confirmación de Retiro ────────────────────────────────── */}
+      {retiroModalOpen && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-2xl border border-zinc-200 w-full max-w-md p-6 space-y-5">
+            {/* Header */}
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-xl bg-rose-100 flex items-center justify-center shrink-0">
+                <AlertTriangle className="w-5 h-5 text-rose-600" />
+              </div>
+              <div>
+                <h4 className="font-black text-zinc-950 text-sm">Confirmar Retiro de Alumno</h4>
+                <p className="text-xs text-zinc-500 mt-0.5">
+                  {currentMatricula.alumno.nombres} {currentMatricula.alumno.apellidos} —{' '}
+                  <span className="font-mono">{currentMatricula.codigo_matricula}</span>
+                </p>
+              </div>
+            </div>
+
+            {/* Advertencia */}
+            <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-xs text-rose-800 space-y-1">
+              <p className="font-bold flex items-center gap-1.5"><XCircle className="w-3.5 h-3.5" /> Esto realizará automáticamente:</p>
+              <ul className="list-disc list-inside space-y-0.5 text-rose-700 pl-1">
+                <li>Cambiar estado del alumno a <strong>RETIRADO</strong></li>
+                <li>Marcar todas las cuotas pendientes como <strong>CONDONADAS</strong></li>
+                <li>Poner saldo pendiente en <strong>S/ 0.00</strong></li>
+                <li>Registrar auditoría con fecha, motivo y usuario</li>
+              </ul>
+            </div>
+
+            {/* Input de motivo */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-zinc-700 block">
+                Motivo del retiro <span className="text-zinc-400 font-normal">(obligatorio)</span>
+              </label>
+              <textarea
+                value={motivoRetiro}
+                onChange={(e) => setMotivoRetiro(e.target.value)}
+                placeholder="Ej: Alumno no puede continuar por motivos personales..."
+                className="w-full px-3 py-2 rounded-xl border border-zinc-300 text-xs text-zinc-900 outline-none focus:border-rose-400 resize-none h-20 font-medium"
+                autoFocus
+              />
+            </div>
+
+            {/* Acciones */}
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => { setRetiroModalOpen(false); setMotivoRetiro(''); }}
+                disabled={actualizandoEstado}
+                className="flex-1 py-2 rounded-xl border border-zinc-200 text-zinc-700 text-xs font-bold hover:bg-zinc-50 transition-colors cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmarRetiro}
+                disabled={actualizandoEstado || !motivoRetiro.trim()}
+                className="flex-1 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-black transition-colors disabled:opacity-50 cursor-pointer active:scale-95"
+              >
+                {actualizandoEstado ? 'Procesando...' : 'Confirmar Retiro'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Modal de Edición de Plan Financiero (Costo & Cuotas) ──────────── */}
+      {editarPlanOpen && (
+        <div className="fixed inset-0 z-[75] flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-sm overflow-y-auto">
+          <div className="relative w-full max-w-lg bg-white border border-zinc-200 rounded-2xl shadow-2xl overflow-hidden my-6">
+            
+            {/* Header */}
+            <div className="px-5 py-4 border-b border-zinc-200 bg-zinc-50 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-black text-white flex items-center justify-center">
+                  <SlidersHorizontal className="w-4 h-4" />
+                </div>
+                <div>
+                  <h4 className="font-bold text-zinc-950 text-sm">
+                    Editar Costo & Plan de Cuotas
+                  </h4>
+                  <p className="text-[11px] text-zinc-500">
+                    {currentMatricula.alumno.nombres} {currentMatricula.alumno.apellidos} • <span className="font-mono">{currentMatricula.codigo_matricula}</span>
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditarPlanOpen(false)}
+                className="p-1.5 rounded-lg text-zinc-400 hover:text-black hover:bg-zinc-200 transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Formulario */}
+            <form onSubmit={handleGuardarPlanFinanciero} className="p-5 space-y-4 text-xs">
+              
+              {errorPlan && (
+                <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 shrink-0" />
+                  <span>{errorPlan}</span>
+                </div>
+              )}
+
+              {/* Programa actual */}
+              <div className="p-3 rounded-xl bg-zinc-50 border border-zinc-200 flex items-center justify-between">
+                <div>
+                  <span className="text-[10px] uppercase font-bold text-zinc-400 block tracking-wider">Programa Asignado</span>
+                  <span className="font-bold text-zinc-900 text-xs">{currentMatricula.curso_nombre || currentMatricula.curso?.titulo}</span>
+                </div>
+                <span className="text-[11px] px-2 py-0.5 rounded font-bold bg-zinc-200 text-zinc-800">
+                  {currentMatricula.sede}
+                </span>
+              </div>
+
+              {/* Valores monetarios principales */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-zinc-700 mb-1">
+                    Costo Total del Curso (S/) *
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="1"
+                    required
+                    value={nuevoTotalCurso}
+                    onChange={(e) => setNuevoTotalCurso(parseFloat(e.target.value) || 0)}
+                    className="w-full px-3 py-2 rounded-xl bg-zinc-50 border border-zinc-300 font-mono font-bold text-zinc-950 focus:border-black outline-none text-sm"
+                  />
+                  <p className="text-[10px] text-zinc-400 mt-1">Precio pactado oficial por todo el curso</p>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-zinc-700 mb-1">
+                    Matrícula Inicial Pagada (S/) *
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    required
+                    value={nuevoMontoMatricula}
+                    onChange={(e) => setNuevoMontoMatricula(parseFloat(e.target.value) || 0)}
+                    className="w-full px-3 py-2 rounded-xl bg-emerald-50 border border-emerald-300 font-mono font-bold text-emerald-950 focus:border-emerald-600 outline-none text-sm"
+                  />
+                  <p className="text-[10px] text-emerald-700 mt-1">Abonado el primer día al registrarse</p>
+                </div>
+              </div>
+
+              {/* Modalidad de Pago */}
+              <div className="space-y-2 pt-1">
+                <label className="block font-bold text-zinc-800 uppercase tracking-wider text-[11px]">
+                  Modalidad de Liquidación / Cobro
+                </label>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {/* Opción 1: Contado */}
+                  <label
+                    onClick={() => setModalidadPlan('CONTADO')}
+                    className={`p-3 rounded-xl border flex flex-col justify-between cursor-pointer transition-all ${
+                      modalidadPlan === 'CONTADO'
+                        ? 'border-emerald-600 bg-emerald-50/60 ring-2 ring-emerald-600/20'
+                        : 'border-zinc-200 bg-zinc-50/50 hover:bg-zinc-100'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-zinc-900 text-xs">Pago al Contado (100%)</span>
+                      <input
+                        type="radio"
+                        name="modalidadPlan"
+                        checked={modalidadPlan === 'CONTADO'}
+                        onChange={() => setModalidadPlan('CONTADO')}
+                        className="accent-emerald-600"
+                      />
+                    </div>
+                    <p className="text-[11px] text-zinc-500 mt-1.5">
+                      El curso se considera liquidado en su totalidad. Saldo: <strong>S/ 0.00</strong>. No genera cuotas.
+                    </p>
+                  </label>
+
+                  {/* Opción 2: Cuotas */}
+                  <label
+                    onClick={() => setModalidadPlan('CUOTAS')}
+                    className={`p-3 rounded-xl border flex flex-col justify-between cursor-pointer transition-all ${
+                      modalidadPlan === 'CUOTAS'
+                        ? 'border-black bg-zinc-100 ring-2 ring-black/10'
+                        : 'border-zinc-200 bg-zinc-50/50 hover:bg-zinc-100'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-zinc-900 text-xs">En Cuotas Mensuales</span>
+                      <input
+                        type="radio"
+                        name="modalidadPlan"
+                        checked={modalidadPlan === 'CUOTAS'}
+                        onChange={() => setModalidadPlan('CUOTAS')}
+                        className="accent-black"
+                      />
+                    </div>
+                    <p className="text-[11px] text-zinc-500 mt-1.5">
+                      Divide el saldo restante en cuotas con vencimiento mensual cada 30 días.
+                    </p>
+                  </label>
+                </div>
+              </div>
+
+              {/* Si es cuotas, selector de cuotas y cálculo */}
+              {modalidadPlan === 'CUOTAS' && (
+                <div className="p-3.5 rounded-xl bg-zinc-50 border border-zinc-200 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <label className="font-bold text-zinc-800">
+                      Número de Cuotas a Generar:
+                    </label>
+                    <select
+                      value={numCuotasEditar}
+                      onChange={(e) => setNumCuotasEditar(parseInt(e.target.value) || 1)}
+                      className="px-3 py-1.5 rounded-lg bg-white border border-zinc-300 font-bold text-zinc-900 outline-none focus:border-black"
+                    >
+                      <option value={1}>1 Cuota mensual</option>
+                      <option value={2}>2 Cuotas mensuales</option>
+                      <option value={3}>3 Cuotas mensuales</option>
+                      <option value={4}>4 Cuotas mensuales</option>
+                      <option value={5}>5 Cuotas mensuales</option>
+                      <option value={6}>6 Cuotas mensuales</option>
+                    </select>
+                  </div>
+
+                  <div className="pt-2 border-t border-zinc-200 flex items-center justify-between text-xs">
+                    <div>
+                      <span className="text-zinc-500">Saldo a financiar: </span>
+                      <strong className="font-mono text-zinc-950 font-bold">
+                        {formatCurrency(Math.max(0, nuevoTotalCurso - nuevoMontoMatricula))}
+                      </strong>
+                    </div>
+                    <div>
+                      <span className="text-zinc-500">Cada cuota: </span>
+                      <strong className="font-mono text-emerald-700 font-bold text-sm">
+                        {formatCurrency(
+                          Math.max(0, nuevoTotalCurso - nuevoMontoMatricula) > 0
+                            ? Math.round((Math.max(0, nuevoTotalCurso - nuevoMontoMatricula) / numCuotasEditar) * 10) / 10
+                            : 0
+                        )}
+                      </strong>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Botones de acción */}
+              <div className="flex gap-2 pt-2 border-t border-zinc-100">
+                <button
+                  type="button"
+                  onClick={() => setEditarPlanOpen(false)}
+                  disabled={guardandoPlan}
+                  className="flex-1 py-2.5 rounded-xl border border-zinc-200 text-zinc-700 font-bold text-xs hover:bg-zinc-50 transition-colors cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={guardandoPlan || nuevoTotalCurso <= 0}
+                  className="flex-1 py-2.5 rounded-xl bg-black hover:bg-zinc-800 text-white font-bold text-xs transition-colors flex items-center justify-center gap-1.5 shadow-sm active:scale-95 cursor-pointer disabled:opacity-50"
+                >
+                  {guardandoPlan ? 'Guardando...' : 'Guardar Plan Financiero'}
+                </button>
+              </div>
+
+            </form>
+          </div>
+        </div>
       )}
     </>
   );

@@ -21,6 +21,9 @@ import {
   XCircle,
   Clock,
   ShieldAlert,
+  GraduationCap,
+  BookOpen,
+  ShoppingBag,
 } from 'lucide-react';
 import { getVentasPOSPaginadas, VentaRegistradaPOS } from '@/lib/pos-service';
 import { formatCurrency } from '@/lib/utils';
@@ -445,6 +448,10 @@ export function POSSalesHistoryModal({
                   className={`p-3 rounded-2xl border transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs shadow-2xs ${
                     esAnulado
                       ? 'bg-rose-50/40 border-rose-200/80 opacity-90'
+                      : v.tipo_transaccion === 'MATRICULA'
+                      ? 'bg-blue-50/40 border-blue-200/80 hover:border-blue-300'
+                      : v.tipo_transaccion === 'CUOTA'
+                      ? 'bg-purple-50/40 border-purple-200/80 hover:border-purple-300'
                       : 'bg-white border-zinc-200 hover:border-zinc-300'
                   }`}
                 >
@@ -454,6 +461,26 @@ export function POSSalesHistoryModal({
                       <span className="font-mono font-black text-xs text-black bg-zinc-100 px-1.5 py-0.5 rounded border border-zinc-200">
                         #{v.codigo_pedido}
                       </span>
+
+                      {/* Badge de tipo de transacción */}
+                      {v.tipo_transaccion === 'MATRICULA' && (
+                        <span className="inline-flex items-center gap-1 text-[9px] font-black px-1.5 py-0.5 rounded-full bg-blue-600 text-white">
+                          <GraduationCap className="w-2.5 h-2.5" />
+                          MATRÍCULA
+                        </span>
+                      )}
+                      {v.tipo_transaccion === 'CUOTA' && (
+                        <span className="inline-flex items-center gap-1 text-[9px] font-black px-1.5 py-0.5 rounded-full bg-purple-600 text-white">
+                          <BookOpen className="w-2.5 h-2.5" />
+                          CUOTA
+                        </span>
+                      )}
+                      {(v.tipo_transaccion === 'VENTA_POS' || !v.tipo_transaccion) && (
+                        <span className="inline-flex items-center gap-1 text-[9px] font-black px-1.5 py-0.5 rounded-full bg-zinc-800 text-white">
+                          <ShoppingBag className="w-2.5 h-2.5" />
+                          VENTA
+                        </span>
+                      )}
 
                       <span className="text-[10px] text-zinc-500 font-mono">
                         {fechaTexto}
@@ -511,8 +538,8 @@ export function POSSalesHistoryModal({
                       </span>
                     </div>
 
-                    {/* Botón Reimprimir Ticket */}
-                    {onSeleccionarParaReimprimir && (v as any).ventaCompleta && (
+                    {/* Botón Reimprimir Ticket (solo ventas POS) */}
+                    {onSeleccionarParaReimprimir && (v as any).ventaCompleta && (!v.tipo_transaccion || v.tipo_transaccion === 'VENTA_POS') && (
                       <button
                         type="button"
                         onClick={() => onSeleccionarParaReimprimir((v as any).ventaCompleta)}
@@ -524,29 +551,38 @@ export function POSSalesHistoryModal({
                       </button>
                     )}
 
-                    {/* Botón Anular Venta (solo disponible si no está anulado ya) */}
-                    {!esAnulado ? (
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setVentaParaAnular({
-                            id: v.id,
-                            codigo_pedido: v.codigo_pedido,
-                            total: v.total,
-                            sede_nombre: sedeActiva === 'huancayo' ? 'Huancayo' : 'Ica',
-                            cliente_nombre: v.cliente_nombre || 'Cliente Mostrador',
-                            items: [],
-                          })
-                        }
-                        className="p-2 rounded-xl border border-rose-200 bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-bold transition-all shadow-2xs flex items-center gap-1 cursor-pointer active:scale-95"
-                        title="Anular esta venta y devolver productos al inventario"
-                      >
-                        <RotateCcw className="w-3.5 h-3.5 text-rose-600" />
-                        <span className="hidden sm:inline text-[11px]">Anular</span>
-                      </button>
-                    ) : (
-                      <span className="text-[10px] font-bold text-rose-500 font-mono px-2 py-1 bg-rose-50/50 rounded-lg border border-rose-100">
-                        Anulada
+                    {/* Botón Anular (solo ventas POS, no matrículas ni cuotas) */}
+                    {(!v.tipo_transaccion || v.tipo_transaccion === 'VENTA_POS') && (
+                      !esAnulado ? (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setVentaParaAnular({
+                              id: v.id,
+                              codigo_pedido: v.codigo_pedido,
+                              total: v.total,
+                              sede_nombre: sedeActiva === 'huancayo' ? 'Huancayo' : 'Ica',
+                              cliente_nombre: v.cliente_nombre || 'Cliente Mostrador',
+                              items: [],
+                            })
+                          }
+                          className="p-2 rounded-xl border border-rose-200 bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-bold transition-all shadow-2xs flex items-center gap-1 cursor-pointer active:scale-95"
+                          title="Anular esta venta y devolver productos al inventario"
+                        >
+                          <RotateCcw className="w-3.5 h-3.5 text-rose-600" />
+                          <span className="hidden sm:inline text-[11px]">Anular</span>
+                        </button>
+                      ) : (
+                        <span className="text-[10px] font-bold text-rose-500 font-mono px-2 py-1 bg-rose-50/50 rounded-lg border border-rose-100">
+                          Anulada
+                        </span>
+                      )
+                    )}
+
+                    {/* Matrículas y cuotas: gestionadas desde Academia */}
+                    {v.tipo_transaccion && v.tipo_transaccion !== 'VENTA_POS' && (
+                      <span className="text-[10px] text-zinc-400 font-mono px-2 py-1 bg-zinc-50 rounded-lg border border-zinc-100">
+                        Academia
                       </span>
                     )}
                   </div>

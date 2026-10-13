@@ -111,15 +111,23 @@ export default function AdminPedidosPage() {
     cargarDatos();
   }, [cargarDatos]);
 
-  // Suscripción Realtime a cambios en pedidos
+  // Suscripción Realtime a cambios en pedidos, matrículas y cuotas
   useEffect(() => {
     const handleEventoLocal = () => cargarDatos();
     window.addEventListener('galindo_pedido_web_realizado', handleEventoLocal);
     window.addEventListener('galindo_sede_changed', handleEventoLocal);
+    window.addEventListener('galindo_matricula_registrada', handleEventoLocal);
+    window.addEventListener('galindo_cuota_pagada', handleEventoLocal);
 
     const channel = supabase
       .channel('admin_pedidos_pos_feed')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'pedidos' }, () => {
+        cargarDatos();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'matriculas' }, () => {
+        cargarDatos();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'cuotas_matricula' }, () => {
         cargarDatos();
       })
       .subscribe();
@@ -127,6 +135,8 @@ export default function AdminPedidosPage() {
     return () => {
       window.removeEventListener('galindo_pedido_web_realizado', handleEventoLocal);
       window.removeEventListener('galindo_sede_changed', handleEventoLocal);
+      window.removeEventListener('galindo_matricula_registrada', handleEventoLocal);
+      window.removeEventListener('galindo_cuota_pagada', handleEventoLocal);
       supabase.removeChannel(channel);
     };
   }, [cargarDatos]);
@@ -200,6 +210,10 @@ export default function AdminPedidosPage() {
 
   const handleOpenEditar = (e: React.MouseEvent, ped: PedidoCompleto) => {
     e.stopPropagation();
+    if (ped.tipo_canal === 'ACADEMIA') {
+      handleOpenDetalle(ped, 'ACADEMIA');
+      return;
+    }
     setPedidoParaEditar(ped);
     setModalEditarOpen(true);
   };

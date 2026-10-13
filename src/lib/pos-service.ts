@@ -42,12 +42,14 @@ export interface VentaRegistradaPOS {
   cliente_telefono?: string;
   cliente_dni?: string;
   total: number;
-  metodo_pago: MetodoPago;
+  metodo_pago: MetodoPago | string;
   metodo_entrega: string;
   estado: string;
   creado_en: string;
   items_resumen?: string;
   items_count: number;
+  /** Distingue el origen del ingreso para mostrar en Ventas Turno */
+  tipo_transaccion?: 'VENTA_POS' | 'MATRICULA' | 'CUOTA';
 }
 
 /**
@@ -353,9 +355,144 @@ export interface ResultadoVentasPOSPaginado {
   totalAnulados: number;
 }
 
+// ---------------------------------------------------------------------------
+// Helpers privados para combinar fuentes de ingreso en Ventas Turno
+// ---------------------------------------------------------------------------
+
+/** Obtiene matrículas del día como registros unificados para el arqueo */
+async function obtenerMatriculasParaTurno(
+  sedeId: string | undefined,
+  fechaStr: string
+): Promise<VentaRegistradaPOS[]> {
+  try {
+    const { data: matsData } = await supabase
+      .from('matriculas')
+      .select('id, codigo_matricula, alumno_id, sede, fecha_matricula, monto_matricula_pagado, estado, curso_nombre')
+      .eq('fecha_matricula', fechaStr)
+      .order('fecha_matricula', { ascending: false });
+
+    if (!matsData || matsData.length === 0) return [];
+
+    let filtrados = matsData;
+    if (sedeId) {
+      filtrados = matsData.filter((m: any) => matchSede(m.sede, sedeId));
+    }
+    if (filtrados.length === 0) return [];
+
+    // Traer nombres de alumnos
+    const alumnoIds = [...new Set(filtrados.map((m: any) => m.alumno_id as string))];
+    const { data: alumnosData } = await supabase
+      .from('alumnos')
+      .select('id, nombres, apellidos, dni, celular')
+      .in('id', alumnoIds);
+
+    const alumnosMap: Record<string, any> = {};
+    (alumnosData || []).forEach((a: any) => { alumnosMap[a.id] = a; });
+
+    return filtrados.map((m: any) => {
+      const a = alumnosMap[m.alumno_id] || {};
+      return {
+        id: m.id,
+        codigo_pedido: m.codigo_matricula || `MAT-${String(m.id).slice(0, 6)}`,
+        cliente_nombre: `${a.nombres || ''} ${a.apellidos || ''}`.trim() || 'Alumno',
+        cliente_telefono: a.celular,
+        cliente_dni: a.dni,
+        total: Number(m.monto_matricula_pagado || 0),
+        metodo_pago: 'EFECTIVO' as MetodoPago,
+        metodo_entrega: 'ACADEMIA',
+        estado: m.estado === 'RETIRADO' ? 'CANCELADO' : 'ENTREGADO',
+        creado_en: `${m.fecha_matricula}T17:00:00.000Z`,
+        items_resumen: `Matrícula: ${m.curso_nombre || 'Curso'}`,
+        items_count: 1,
+        tipo_transaccion: 'MATRICULA' as const,
+      };
+    });
+  } catch (err) {
+    console.error('Error al obtener matrículas para turno:', err);
+    return [];
+  }
+}
+
+/** Obtiene pagos de cuotas del día como registros unificados para el arqueo */
+async function obtenerCuotasParaTurno(
+  sedeId: string | undefined,
+  inicioISO: string,
+  finISO: string
+): Promise<VentaRegistradaPOS[]> {
+  try {
+    const { data: cuotasData } = await supabase
+      .from('cuotas_matricula')
+      .select('id, matricula_id, numero_cuota, monto, fecha_pago, metodo_pago, estado')
+      .eq('estado', 'PAGADA')
+      .not('fecha_pago', 'is', null)
+      .gte('fecha_pago', inicioISO)
+      .lte('fecha_pago', finISO)
+      .order('fecha_pago', { ascending: false });
+
+    if (!cuotasData || cuotasData.length === 0) return [];
+
+    // Traer matrículas para filtro de sede e info del curso
+    const matriculaIds = [...new Set(cuotasData.map((c: any) => c.matricula_id as string))];
+    const { data: matsData } = await supabase
+      .from('matriculas')
+      .select('id, codigo_matricula, alumno_id, sede, curso_nombre')
+      .in('id', matriculaIds);
+
+    const matsMap: Record<string, any> = {};
+    (matsData || []).forEach((m: any) => { matsMap[m.id] = m; });
+
+    let filtrados = cuotasData;
+    if (sedeId) {
+      filtrados = cuotasData.filter((c: any) => {
+        const mat = matsMap[c.matricula_id];
+        return mat && matchSede(mat.sede, sedeId);
+      });
+    }
+    if (filtrados.length === 0) return [];
+
+    // Traer alumnos
+    const alumnoIds = [
+      ...new Set(
+        filtrados.map((c: any) => matsMap[c.matricula_id]?.alumno_id as string).filter(Boolean)
+      ),
+    ];
+    const { data: alumnosData } = await supabase
+      .from('alumnos')
+      .select('id, nombres, apellidos, dni, celular')
+      .in('id', alumnoIds);
+
+    const alumnosMap: Record<string, any> = {};
+    (alumnosData || []).forEach((a: any) => { alumnosMap[a.id] = a; });
+
+    return filtrados.map((c: any) => {
+      const mat = matsMap[c.matricula_id] || {};
+      const a = alumnosMap[mat.alumno_id] || {};
+      return {
+        id: c.id,
+        codigo_pedido: `${mat.codigo_matricula || 'MAT'}-C${c.numero_cuota}`,
+        cliente_nombre: `${a.nombres || ''} ${a.apellidos || ''}`.trim() || 'Alumno',
+        cliente_telefono: a.celular,
+        cliente_dni: a.dni,
+        total: Number(c.monto || 0),
+        metodo_pago: (c.metodo_pago || 'EFECTIVO') as MetodoPago,
+        metodo_entrega: 'ACADEMIA',
+        estado: 'ENTREGADO',
+        creado_en: c.fecha_pago,
+        items_resumen: `Cuota #${c.numero_cuota} — ${mat.curso_nombre || 'Curso'}`,
+        items_count: 1,
+        tipo_transaccion: 'CUOTA' as const,
+      };
+    });
+  } catch (err) {
+    console.error('Error al obtener cuotas para turno:', err);
+    return [];
+  }
+}
+
 /**
- * Consulta ventas de mostrador con paginación optimizada (10 por página),
- * filtros por fecha seleccionada y conteo de totales de arqueo.
+ * Consulta TODOS los ingresos del turno con paginación en memoria:
+ * combina ventas POS de productos + matrículas + pagos de cuotas.
+ * Los KPIs y totales reflejan la suma real del día de caja.
  */
 export async function getVentasPOSPaginadas({
   sedeId,
@@ -366,91 +503,93 @@ export async function getVentasPOSPaginadas({
   incluirAnulados = true,
 }: FiltrosVentasPOS): Promise<ResultadoVentasPOSPaginado> {
   try {
-    let query = supabase
+    const hasFecha = Boolean(fecha && fecha.trim());
+    const fechaStr = hasFecha ? fecha!.trim() : '';
+    const { inicioISO, finISO } = hasFecha
+      ? getRangoFechaPeru(fechaStr)
+      : { inicioISO: '', finISO: '' };
+
+    // ── 1. Pedidos POS (ventas de productos de mostrador) ────────────────
+    let pedidosQuery = supabase
       .from('pedidos')
       .select(
-        'id, codigo_pedido, cliente_nombre, cliente_telefono, cliente_dni, total, metodo_pago, metodo_entrega, estado, creado_en, sede_id, ciudad, notas',
-        { count: 'exact' }
+        'id, codigo_pedido, cliente_nombre, cliente_telefono, cliente_dni, total, metodo_pago, metodo_entrega, estado, creado_en, sede_id, ciudad, notas'
       )
       .order('creado_en', { ascending: false });
 
-    // 1. Filtro de Fecha (Perú UTC-5)
-    if (fecha && fecha.trim()) {
-      const { inicioISO, finISO } = getRangoFechaPeru(fecha.trim());
-      query = query.gte('creado_en', inicioISO).lte('creado_en', finISO);
+    if (hasFecha) {
+      pedidosQuery = pedidosQuery.gte('creado_en', inicioISO).lte('creado_en', finISO);
+    } else {
+      pedidosQuery = pedidosQuery.limit(200);
     }
-
-    // 2. Filtro de Estado
     if (!incluirAnulados) {
-      query = query.neq('estado', 'CANCELADO');
+      pedidosQuery = pedidosQuery.neq('estado', 'CANCELADO');
     }
 
-    // 3. Búsqueda de Texto
-    const q = busqueda.trim();
-    if (q) {
-      query = query.or(
-        `codigo_pedido.ilike.%${q}%,cliente_nombre.ilike.%${q}%,cliente_dni.ilike.%${q}%,cliente_telefono.ilike.%${q}%`
-      );
+    // ── 2. Matrículas + cuotas (solo cuando hay filtro de fecha) ─────────
+    const matriculasPromise = hasFecha
+      ? obtenerMatriculasParaTurno(sedeId, fechaStr)
+      : Promise.resolve([] as VentaRegistradaPOS[]);
+
+    const cuotasPromise = hasFecha
+      ? obtenerCuotasParaTurno(sedeId, inicioISO, finISO)
+      : Promise.resolve([] as VentaRegistradaPOS[]);
+
+    // Ejecutar las 3 consultas en paralelo
+    const [pedidosResult, matriculas, cuotas] = await Promise.all([
+      pedidosQuery,
+      matriculasPromise,
+      cuotasPromise,
+    ]);
+
+    if (pedidosResult.error) {
+      console.error('Error al consultar pedidos:', pedidosResult.error);
     }
 
-    // 4. Paginación en BD: traer únicamente los 10 registros solicitados
-    const from = (pagina - 1) * porPagina;
-    const to = from + porPagina - 1;
-    query = query.range(from, to);
-
-    const { data, count, error } = await query;
-
-    if (error) {
-      console.error('Error al consultar ventas paginadas:', error);
-      return {
-        ventas: [],
-        totalRegistros: 0,
-        totalPaginas: 1,
-        paginaActual: pagina,
-        totalVendido: 0,
-        totalTicketsValidos: 0,
-        totalAnulados: 0,
-      };
-    }
-
-    let filtrados = data || [];
+    // Mapear pedidos y filtrar por sede
+    let pedidosMapped: VentaRegistradaPOS[] = (pedidosResult.data || []).map((d: any) => ({
+      ...d,
+      items_count: 1,
+      tipo_transaccion: 'VENTA_POS' as const,
+    }));
     if (sedeId) {
-      filtrados = filtrados.filter((d: any) => {
-        const sedeCandidata = d.sede_id || d.ciudad || d.notas || '';
-        return matchSede(sedeCandidata, sedeId);
+      pedidosMapped = pedidosMapped.filter((d) => {
+        const sc = (d as any).sede_id || (d as any).ciudad || (d as any).notas || '';
+        return matchSede(sc, sedeId);
       });
     }
 
-    // Totales del período filtrado para los KPIs
-    let queryTotales = supabase
-      .from('pedidos')
-      .select('total, estado, sede_id, ciudad, notas');
+    // ── Combinar y ordenar por fecha descendente ─────────────────────────
+    const todas: VentaRegistradaPOS[] = [
+      ...pedidosMapped,
+      ...matriculas,
+      ...cuotas,
+    ].sort((a, b) => new Date(b.creado_en).getTime() - new Date(a.creado_en).getTime());
 
-    if (fecha && fecha.trim()) {
-      const { inicioISO, finISO } = getRangoFechaPeru(fecha.trim());
-      queryTotales = queryTotales.gte('creado_en', inicioISO).lte('creado_en', finISO);
-    }
+    // ── Búsqueda de texto sobre todos los registros combinados ───────────
+    const q = busqueda.trim().toLowerCase();
+    const filtradas = q
+      ? todas.filter(
+          (v) =>
+            (v.codigo_pedido || '').toLowerCase().includes(q) ||
+            (v.cliente_nombre || '').toLowerCase().includes(q) ||
+            (v.cliente_dni || '').includes(q) ||
+            (v.cliente_telefono || '').includes(q) ||
+            (v.items_resumen || '').toLowerCase().includes(q)
+        )
+      : todas;
 
-    const { data: dataTotales } = await queryTotales;
-    let totalesSede = dataTotales || [];
-    if (sedeId) {
-      totalesSede = totalesSede.filter((d: any) =>
-        matchSede(d.sede_id || d.ciudad || d.notas || '', sedeId)
-      );
-    }
-
-    const ticketsValidos = totalesSede.filter((p: any) => p.estado !== 'CANCELADO');
-    const totalVendido = ticketsValidos.reduce((acc, p) => acc + Number(p.total || 0), 0);
-    const totalTicketsValidos = ticketsValidos.length;
-    const totalAnulados = totalesSede.filter((p: any) => p.estado === 'CANCELADO').length;
-
-    const totalRegistros = count !== null ? count : filtrados.length;
+    // ── KPIs del período ─────────────────────────────────────────────────
+    const validas = filtradas.filter((v) => v.estado !== 'CANCELADO');
+    const totalVendido = validas.reduce((acc, v) => acc + Number(v.total || 0), 0);
+    const totalTicketsValidos = validas.length;
+    const totalAnulados = filtradas.filter((v) => v.estado === 'CANCELADO').length;
+    const totalRegistros = filtradas.length;
     const totalPaginas = Math.max(1, Math.ceil(totalRegistros / porPagina));
 
-    const ventas = filtrados.map((d: any) => ({
-      ...d,
-      items_count: 1,
-    }));
+    // ── Paginación en memoria ────────────────────────────────────────────
+    const desde = (pagina - 1) * porPagina;
+    const ventas = filtradas.slice(desde, desde + porPagina);
 
     return {
       ventas,
