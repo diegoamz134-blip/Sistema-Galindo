@@ -4,8 +4,8 @@
 
 import { supabase } from '@/lib/supabase';
 import { SEDES, SedeId, BUSINESS_INFO } from '@/lib/constants';
-import { formatCurrency } from '@/lib/utils';
-import { crearMatriculaCompleta, matchSede, retirarMatricula } from '@/lib/academia-service';
+import { formatCurrency, normalizarMetodoPago } from '@/lib/utils';
+import { crearMatriculaCompleta, matchSede, retirarMatricula, actualizarMetodoPagoMatricula, actualizarMetodoPagoCuota } from '@/lib/academia-service';
 import { Alumno, Matricula } from '@/types/database';
 
 export interface PedidoItemDetallado {
@@ -263,7 +263,7 @@ export async function getPedidosAdmin(filtros?: FiltrosPedidosAdmin): Promise<Pe
         ciudad: m.sede || (esHuancayo ? 'Huancayo' : 'Ica'),
         sede_id: sedeId,
         metodo_entrega: 'ACADEMIA',
-        metodo_pago: 'EFECTIVO',
+        metodo_pago: normalizarMetodoPago(m.metodo_pago, m.notas),
         estado,
         subtotal: montoPagado,
         costo_envio: 0,
@@ -314,7 +314,7 @@ export async function getPedidosAdmin(filtros?: FiltrosPedidosAdmin): Promise<Pe
         ciudad: mat.sede || (esHuancayo ? 'Huancayo' : 'Ica'),
         sede_id: sedeId,
         metodo_entrega: 'ACADEMIA',
-        metodo_pago: c.metodo_pago || 'EFECTIVO',
+        metodo_pago: normalizarMetodoPago(c.metodo_pago, c.notas),
         estado: 'ENTREGADO' as const,
         subtotal: monto,
         costo_envio: 0,
@@ -633,24 +633,77 @@ export async function editarPedidoAdmin(
   }
 ): Promise<{ ok: boolean; error?: string }> {
   try {
-    const payload: Record<string, any> = {
-      actualizado_en: new Date().toISOString(),
-    };
-    if (datos.cliente_nombre !== undefined) payload.cliente_nombre = datos.cliente_nombre.trim();
-    if (datos.cliente_dni !== undefined) payload.cliente_dni = datos.cliente_dni.trim();
-    if (datos.cliente_telefono !== undefined) payload.cliente_telefono = datos.cliente_telefono.trim();
-    if (datos.metodo_pago !== undefined) payload.metodo_pago = datos.metodo_pago;
-    if (datos.notas !== undefined) payload.notas = datos.notas;
-
-    const { error } = await supabase
+    // 1. Verificar si el registro existe en 'pedidos'
+    const { data: pedidoExistente } = await supabase
       .from('pedidos')
-      .update(payload)
-      .eq('id', pedidoId);
+      .select('id')
+      .eq('id', pedidoId)
+      .maybeSingle();
 
-    if (error) throw error;
+    if (pedidoExistente) {
+      const payload: Record<string, any> = {
+        actualizado_en: new Date().toISOString(),
+      };
+      if (datos.cliente_nombre !== undefined) payload.cliente_nombre = datos.cliente_nombre.trim();
+      if (datos.cliente_dni !== undefined) payload.cliente_dni = datos.cliente_dni.trim();
+      if (datos.cliente_telefono !== undefined) payload.cliente_telefono = datos.cliente_telefono.trim();
+      if (datos.metodo_pago !== undefined) payload.metodo_pago = datos.metodo_pago;
+      if (datos.notas !== undefined) payload.notas = datos.notas;
+
+      const { error } = await supabase
+        .from('pedidos')
+        .update(payload)
+        .eq('id', pedidoId);
+
+      if (error) throw error;
+    } else {
+      // 2. Si no es un pedido común, verificar si es una Matrícula de Academia
+      const { data: matExistente } = await supabase
+        .from('matriculas')
+        .select('id, alumno_id, notas')
+        .eq('id', pedidoId)
+        .maybeSingle();
+
+      if (matExistente) {
+        if (datos.metodo_pago) {
+          await actualizarMetodoPagoMatricula(matExistente.id, datos.metodo_pago);
+        }
+        if (datos.notas !== undefined) {
+          await supabase
+            .from('matriculas')
+            .update({ notas: datos.notas })
+            .eq('id', matExistente.id);
+        }
+        // Si editaron nombre o celular del alumno
+        if (matExistente.alumno_id && (datos.cliente_nombre || datos.cliente_dni || datos.cliente_telefono)) {
+          const alumnoUpdate: Record<string, any> = {};
+          if (datos.cliente_nombre) {
+            const partes = datos.cliente_nombre.trim().split(' ');
+            alumnoUpdate.nombres = partes[0] || datos.cliente_nombre;
+            alumnoUpdate.apellidos = partes.slice(1).join(' ') || '';
+          }
+          if (datos.cliente_dni) alumnoUpdate.dni = datos.cliente_dni.trim();
+          if (datos.cliente_telefono) alumnoUpdate.celular = datos.cliente_telefono.trim();
+
+          await supabase.from('alumnos').update(alumnoUpdate).eq('id', matExistente.alumno_id);
+        }
+      } else {
+        // 3. Verificar si es una Cuota de Matrícula
+        const { data: cuotaExistente } = await supabase
+          .from('cuotas_matricula')
+          .select('id, matricula_id')
+          .eq('id', pedidoId)
+          .maybeSingle();
+
+        if (cuotaExistente && datos.metodo_pago) {
+          await actualizarMetodoPagoCuota(cuotaExistente.id, datos.metodo_pago);
+        }
+      }
+    }
 
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new Event('galindo_pedido_web_realizado'));
+      window.dispatchEvent(new Event('galindo_matricula_registrada'));
     }
 
     return { ok: true };

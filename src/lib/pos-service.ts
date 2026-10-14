@@ -1,6 +1,7 @@
 import { supabase } from '@/lib/supabase';
 import { Producto, MetodoPago } from '@/types/database';
 import { matchSede } from '@/lib/academia-service';
+import { normalizarMetodoPago } from '@/lib/utils';
 
 export interface VentaItemPOS {
   producto: Producto;
@@ -367,7 +368,7 @@ async function obtenerMatriculasParaTurno(
   try {
     const { data: matsData } = await supabase
       .from('matriculas')
-      .select('id, codigo_matricula, alumno_id, sede, fecha_matricula, monto_matricula_pagado, estado, curso_nombre')
+      .select('id, codigo_matricula, alumno_id, sede, fecha_matricula, monto_matricula_pagado, estado, curso_nombre, notas')
       .eq('fecha_matricula', fechaStr)
       .order('fecha_matricula', { ascending: false });
 
@@ -391,6 +392,7 @@ async function obtenerMatriculasParaTurno(
 
     return filtrados.map((m: any) => {
       const a = alumnosMap[m.alumno_id] || {};
+      const metodoPago = normalizarMetodoPago(m.metodo_pago, m.notas) as MetodoPago;
       return {
         id: m.id,
         codigo_pedido: m.codigo_matricula || `MAT-${String(m.id).slice(0, 6)}`,
@@ -398,7 +400,7 @@ async function obtenerMatriculasParaTurno(
         cliente_telefono: a.celular,
         cliente_dni: a.dni,
         total: Number(m.monto_matricula_pagado || 0),
-        metodo_pago: 'EFECTIVO' as MetodoPago,
+        metodo_pago: metodoPago,
         metodo_entrega: 'ACADEMIA',
         estado: m.estado === 'RETIRADO' ? 'CANCELADO' : 'ENTREGADO',
         creado_en: `${m.fecha_matricula}T17:00:00.000Z`,
@@ -422,7 +424,7 @@ async function obtenerCuotasParaTurno(
   try {
     const { data: cuotasData } = await supabase
       .from('cuotas_matricula')
-      .select('id, matricula_id, numero_cuota, monto, fecha_pago, metodo_pago, estado')
+      .select('id, matricula_id, numero_cuota, monto, fecha_pago, metodo_pago, estado, notas')
       .eq('estado', 'PAGADA')
       .not('fecha_pago', 'is', null)
       .gte('fecha_pago', inicioISO)
@@ -467,6 +469,7 @@ async function obtenerCuotasParaTurno(
     return filtrados.map((c: any) => {
       const mat = matsMap[c.matricula_id] || {};
       const a = alumnosMap[mat.alumno_id] || {};
+      const metodoPago = normalizarMetodoPago(c.metodo_pago, c.notas) as MetodoPago;
       return {
         id: c.id,
         codigo_pedido: `${mat.codigo_matricula || 'MAT'}-C${c.numero_cuota}`,
@@ -474,7 +477,7 @@ async function obtenerCuotasParaTurno(
         cliente_telefono: a.celular,
         cliente_dni: a.dni,
         total: Number(c.monto || 0),
-        metodo_pago: (c.metodo_pago || 'EFECTIVO') as MetodoPago,
+        metodo_pago: metodoPago,
         metodo_entrega: 'ACADEMIA',
         estado: 'ENTREGADO',
         creado_en: c.fecha_pago,

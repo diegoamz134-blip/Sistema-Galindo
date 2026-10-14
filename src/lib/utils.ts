@@ -107,3 +107,50 @@ export function slugify(text: string): string {
 export function cn(...classes: (string | boolean | undefined | null)[]): string {
   return classes.filter(Boolean).join(' ');
 }
+
+export type MetodoPagoGeneral = 'YAPE' | 'PLIN' | 'EFECTIVO' | 'TRANSFERENCIA' | 'TARJETA' | 'MIXTO';
+
+/**
+ * Normaliza y extrae el método de pago desde una columna directa o desde notas contextuales
+ */
+export function normalizarMetodoPago(
+  metodo?: string | null,
+  notas?: string | null
+): MetodoPagoGeneral {
+  if (metodo && typeof metodo === 'string' && metodo.trim()) {
+    const m = metodo.trim().toUpperCase();
+    if (m === 'YAPE' || m.includes('YAPE')) return 'YAPE';
+    if (m === 'PLIN' || m.includes('PLIN')) return 'PLIN';
+    if (m === 'TRANSFERENCIA' || m.includes('TRANS') || m.includes('BCP') || m.includes('BBVA')) return 'TRANSFERENCIA';
+    if (m === 'TARJETA' || m.includes('TARJETA') || m.includes('POS') || m.includes('CREDITO') || m.includes('DEBITO')) return 'TARJETA';
+    if (m === 'MIXTO' || m.includes('MIXTO')) return 'MIXTO';
+    if (m === 'EFECTIVO' || m.includes('EFECTIVO')) return 'EFECTIVO';
+  }
+  if (notas && typeof notas === 'string') {
+    const match = notas.match(/\[METODO(?:_PAGO)?:\s*([A-Za-z0-9_]+)\]/i);
+    if (match && match[1]) {
+      return normalizarMetodoPago(match[1]);
+    }
+    const up = notas.toUpperCase();
+    if (up.includes('YAPE')) return 'YAPE';
+    if (up.includes('PLIN')) return 'PLIN';
+    if (up.includes('TRANSFERENCIA') || up.includes('BCP') || up.includes('BBVA')) return 'TRANSFERENCIA';
+    if (up.includes('TARJETA') || up.includes('POS')) return 'TARJETA';
+  }
+  return 'EFECTIVO';
+}
+
+/**
+ * Extrae el número de operación desde notas o columna directa
+ */
+export function extraerNumeroOperacion(
+  numOp?: string | null,
+  notas?: string | null
+): string | undefined {
+  if (numOp && typeof numOp === 'string' && numOp.trim()) return numOp.trim();
+  if (notas && typeof notas === 'string') {
+    const match = notas.match(/\[(?:OP|OPERACION|NUM_OPERACION):\s*([^\]]+)\]/i);
+    if (match && match[1]) return match[1].trim();
+  }
+  return undefined;
+}

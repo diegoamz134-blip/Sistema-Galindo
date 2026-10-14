@@ -208,6 +208,8 @@ export interface Matricula {
   kit_entregado: boolean;
   fecha_entrega_kit?: string | null;
   notas?: string;
+  metodo_pago?: MetodoPago | string;
+  numero_operacion?: string;
   cuotas: CuotaMatricula[];
 }
 

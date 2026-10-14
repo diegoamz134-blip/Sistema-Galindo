@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import { X, Printer, CheckCircle, MessageCircle, Calendar, Download } from 'lucide-react';
 import { MatriculaConDetalle } from '@/lib/academia-service';
-import { formatCurrency, formatDate } from '@/lib/utils';
+import { formatCurrency, formatDate, normalizarMetodoPago } from '@/lib/utils';
 import { BUSINESS_INFO } from '@/lib/constants';
 import { exportarTicketPDF } from '@/lib/ticket-pdf';
 
@@ -205,7 +205,14 @@ export function ReciboMatriculaTicket({
             </div>
             <div className="flex justify-between text-zinc-600">
               <span>Matrícula Inicial:</span>
-              <span>{formatCurrency(pagadoMatricula)}</span>
+              <span className="font-semibold text-zinc-900">
+                {formatCurrency(pagadoMatricula)}
+                {pagadoMatricula > 0 && (
+                  <span className="ml-1 text-[9px] font-mono font-bold uppercase text-zinc-500">
+                    ({normalizarMetodoPago(matricula.metodo_pago, matricula.notas)})
+                  </span>
+                )}
+              </span>
             </div>
             {esLiquidadoContado && montoCursoLiquidadoContado > 0 && (
               <div className="flex justify-between text-emerald-800 font-semibold">

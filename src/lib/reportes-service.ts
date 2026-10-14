@@ -3,6 +3,7 @@ import { PedidoCompleto } from '@/lib/pedidos-service';
 import { format, subDays, startOfMonth, startOfYear, isAfter } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { matchSede } from '@/lib/academia-service';
+import { normalizarMetodoPago } from '@/lib/utils';
 
 export type RangoFecha = 'HOY' | '7_DIAS' | 'MES' | 'AÑO' | 'TODO';
 export type SedeFiltro = 'ica' | 'huancayo' | 'TODAS';
@@ -96,7 +97,7 @@ export async function getReporteFinanciero(
     // 4. Obtener Matrículas pagadas en el rango
     const queryMatriculas = supabase
       .from('matriculas')
-      .select('id, codigo_matricula, sede, monto_matricula_pagado, creado_en, fecha_matricula')
+      .select('id, codigo_matricula, sede, monto_matricula_pagado, creado_en, fecha_matricula, notas')
       .gte('creado_en', fechaISO);
 
     // 5. Obtener Cuotas de Matrícula pagadas en el rango
@@ -233,7 +234,10 @@ export async function getReporteFinanciero(
       if (monto > 0) {
         ingresosBrutos += monto;
         academiaIngresos += monto;
-        efectivo += monto; // Matrícula mostrador default
+        const metodo = normalizarMetodoPago(m.metodo_pago, m.notas);
+        if (metodo.includes('EFECTIVO') || metodo.includes('MIXTO')) efectivo += monto;
+        else if (metodo.includes('YAPE') || metodo.includes('PLIN')) yapePlin += monto;
+        else transferencia += monto;
         addToMap(m.creado_en || m.fecha_matricula || new Date().toISOString(), 'ingreso', monto);
       }
     });
@@ -244,7 +248,7 @@ export async function getReporteFinanciero(
       if (monto > 0) {
         ingresosBrutos += monto;
         academiaIngresos += monto;
-        const metodo = (c.metodo_pago || 'EFECTIVO').toUpperCase();
+        const metodo = normalizarMetodoPago(c.metodo_pago, c.notas);
         if (metodo.includes('EFECTIVO') || metodo.includes('MIXTO')) efectivo += monto;
         else if (metodo.includes('YAPE') || metodo.includes('PLIN')) yapePlin += monto;
         else transferencia += monto;

@@ -137,6 +137,7 @@ export function NuevaMatriculaModal({
       numero_operacion: numeroOperacion.trim() || undefined,
       kit_entregado: kitEntregado,
       notas: notas.trim() || undefined,
+      registrar_en_caja: true,
     };
 
     const res = await crearMatriculaCompleta(inputData);

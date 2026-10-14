@@ -18,17 +18,25 @@ import {
   Ban,
   SlidersHorizontal,
   Check,
+  Edit3,
+  Banknote,
+  Smartphone,
+  Building2,
+  CreditCard,
+  Layers,
 } from 'lucide-react';
 import {
   MatriculaConDetalle,
   actualizarEstadoAcademico,
   actualizarSedeMatricula,
   actualizarPlanFinancieroMatricula,
+  actualizarMetodoPagoMatricula,
+  actualizarMetodoPagoCuota,
   matchSede,
   retirarMatricula,
 } from '@/lib/academia-service';
 import { CuotaMatricula, EstadoAcademico } from '@/types/database';
-import { formatCurrency, formatDate } from '@/lib/utils';
+import { formatCurrency, formatDate, normalizarMetodoPago, extraerNumeroOperacion } from '@/lib/utils';
 import { useAuth } from '@/context/AuthContext';
 import { RegistrarPagoCuotaModal } from './RegistrarPagoCuotaModal';
 import { ReciboMatriculaTicket } from './ReciboMatriculaTicket';
@@ -64,6 +72,82 @@ export function DetalleAlumnoModal({
   const [numCuotasEditar, setNumCuotasEditar] = useState<number>(2);
   const [guardandoPlan, setGuardandoPlan] = useState<boolean>(false);
   const [errorPlan, setErrorPlan] = useState<string | null>(null);
+
+  // Estado para modal de cambio de método de pago (Matrícula inicial o Cuota)
+  const [modalCambiarMetodo, setModalCambiarMetodo] = useState(false);
+  const [targetEdicionMetodo, setTargetEdicionMetodo] = useState<{
+    tipo: 'MATRICULA' | 'CUOTA';
+    id: string;
+    numeroCuota?: number;
+    metodoActual: string;
+    operacionActual?: string;
+  } | null>(null);
+  const [nuevoMetodoPago, setNuevoMetodoPago] = useState<string>('YAPE');
+  const [nuevoNumOperacion, setNuevoNumOperacion] = useState<string>('');
+  const [guardandoMetodo, setGuardandoMetodo] = useState<boolean>(false);
+  const [errorCambiarMetodo, setErrorCambiarMetodo] = useState<string | null>(null);
+
+  const handleAbrirCambiarMetodo = (
+    tipo: 'MATRICULA' | 'CUOTA',
+    id: string,
+    metodoActual: string,
+    operacionActual?: string,
+    numeroCuota?: number
+  ) => {
+    setTargetEdicionMetodo({ tipo, id, numeroCuota, metodoActual, operacionActual });
+    setNuevoMetodoPago(metodoActual || 'YAPE');
+    setNuevoNumOperacion(operacionActual || '');
+    setErrorCambiarMetodo(null);
+    setModalCambiarMetodo(true);
+  };
+
+  const handleGuardarCambioMetodo = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!targetEdicionMetodo) return;
+
+    setGuardandoMetodo(true);
+    setErrorCambiarMetodo(null);
+
+    try {
+      if (targetEdicionMetodo.tipo === 'MATRICULA') {
+        const res = await actualizarMetodoPagoMatricula(
+          targetEdicionMetodo.id,
+          nuevoMetodoPago,
+          nuevoNumOperacion
+        );
+        if (!res.ok) throw new Error(res.error || 'Error al actualizar método de pago');
+
+        setCurrentMatricula((prev) => ({
+          ...prev,
+          metodo_pago: res.metodo_pago || nuevoMetodoPago,
+          numero_operacion: nuevoNumOperacion || undefined,
+        }));
+      } else {
+        const res = await actualizarMetodoPagoCuota(
+          targetEdicionMetodo.id,
+          nuevoMetodoPago,
+          nuevoNumOperacion
+        );
+        if (!res.ok) throw new Error(res.error || 'Error al actualizar método de pago');
+
+        setCurrentMatricula((prev) => ({
+          ...prev,
+          cuotas: (prev.cuotas || []).map((c) =>
+            c.id === targetEdicionMetodo.id
+              ? { ...c, metodo_pago: nuevoMetodoPago as any, numero_operacion: nuevoNumOperacion || undefined }
+              : c
+          ),
+        }));
+      }
+
+      setModalCambiarMetodo(false);
+      onUpdate();
+    } catch (err: any) {
+      setErrorCambiarMetodo(err?.message || 'Error al guardar los cambios');
+    } finally {
+      setGuardandoMetodo(false);
+    }
+  };
 
   // Sincronizar si cambia el prop
   useEffect(() => {
@@ -368,25 +452,62 @@ export function DetalleAlumnoModal({
                   </thead>
                   <tbody className="divide-y divide-zinc-100">
                     {/* Fila Fija 1: Matrícula Inicial */}
-                    <tr className="bg-emerald-50/40">
-                      <td className="px-3 py-2.5 font-bold text-zinc-900">
-                        Matrícula Inicial
-                      </td>
-                      <td className="px-3 py-2.5 text-zinc-500 font-mono">
-                        {formatDate(currentMatricula.fecha_matricula)}
-                      </td>
-                      <td className="px-3 py-2.5 font-mono font-bold text-zinc-900">
-                        {formatCurrency(pagadoMatricula)}
-                      </td>
-                      <td className="px-3 py-2.5">
-                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
-                          PAGADA
-                        </span>
-                      </td>
-                      <td className="px-3 py-2.5 text-right text-zinc-400 font-mono text-[11px]">
-                        Ingreso Inicial
-                      </td>
-                    </tr>
+                    {(() => {
+                      const metodoMatricula = normalizarMetodoPago(currentMatricula.metodo_pago, currentMatricula.notas);
+                      const opMatricula = currentMatricula.numero_operacion || extraerNumeroOperacion(undefined, currentMatricula.notas);
+
+                      return (
+                        <tr className="bg-emerald-50/40">
+                          <td className="px-3 py-2.5 font-bold text-zinc-900">
+                            Matrícula Inicial
+                          </td>
+                          <td className="px-3 py-2.5 text-zinc-500 font-mono">
+                            {formatDate(currentMatricula.fecha_matricula)}
+                          </td>
+                          <td className="px-3 py-2.5 font-mono font-bold text-zinc-900">
+                            {formatCurrency(pagadoMatricula)}
+                          </td>
+                          <td className="px-3 py-2.5">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                                PAGADA
+                              </span>
+                              <span
+                                className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase ${
+                                  metodoMatricula === 'YAPE'
+                                    ? 'bg-purple-100 text-purple-800 border border-purple-200'
+                                    : metodoMatricula === 'PLIN'
+                                    ? 'bg-sky-100 text-sky-800 border border-sky-200'
+                                    : metodoMatricula === 'TRANSFERENCIA'
+                                    ? 'bg-blue-100 text-blue-800 border border-blue-200'
+                                    : metodoMatricula === 'TARJETA'
+                                    ? 'bg-amber-100 text-amber-800 border border-amber-200'
+                                    : 'bg-zinc-100 text-zinc-800 border border-zinc-200'
+                                }`}
+                              >
+                                {metodoMatricula}
+                              </span>
+                              {opMatricula && (
+                                <span className="text-[10px] text-zinc-400 font-mono font-medium">
+                                  #{opMatricula}
+                                </span>
+                              )}
+                            </div>
+                          </td>
+                          <td className="px-3 py-2.5 text-right">
+                            <button
+                              type="button"
+                              onClick={() => handleAbrirCambiarMetodo('MATRICULA', currentMatricula.id, metodoMatricula, opMatricula)}
+                              className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-white border border-zinc-200 hover:border-black text-zinc-700 hover:text-black font-bold text-[10px] transition-colors shadow-2xs cursor-pointer active:scale-95"
+                              title="Editar o corregir el método de pago de esta matrícula"
+                            >
+                              <Edit3 className="w-3 h-3 text-zinc-500" />
+                              <span>Cambiar</span>
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })()}
 
                     {/* Caso A: Si el curso fue liquidado al contado en un solo pago */}
                     {esLiquidadoContado && (
@@ -448,9 +569,39 @@ export function DetalleAlumnoModal({
                             </td>
                             <td className="px-3 py-2.5">
                               {esPagada ? (
-                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
-                                  PAGADA ({cuota.metodo_pago || 'PAGO'})
-                                </span>
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <span
+                                    className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                      cuota.metodo_pago === 'YAPE'
+                                        ? 'bg-purple-100 text-purple-800 border border-purple-200'
+                                        : cuota.metodo_pago === 'PLIN'
+                                        ? 'bg-sky-100 text-sky-800 border border-sky-200'
+                                        : cuota.metodo_pago === 'TRANSFERENCIA'
+                                        ? 'bg-blue-100 text-blue-800 border border-blue-200'
+                                        : cuota.metodo_pago === 'TARJETA'
+                                        ? 'bg-amber-100 text-amber-800 border border-amber-200'
+                                        : 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                                    }`}
+                                  >
+                                    PAGADA ({cuota.metodo_pago || 'PAGO'})
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      handleAbrirCambiarMetodo(
+                                        'CUOTA',
+                                        cuota.id,
+                                        cuota.metodo_pago || 'EFECTIVO',
+                                        cuota.numero_operacion,
+                                        cuota.numero_cuota
+                                      )
+                                    }
+                                    className="p-1 rounded text-zinc-400 hover:text-black hover:bg-zinc-200 transition-colors cursor-pointer"
+                                    title="Editar método de pago de esta cuota"
+                                  >
+                                    <Edit3 className="w-3 h-3" />
+                                  </button>
+                                </div>
                               ) : esCondonada ? (
                                 <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-zinc-100 text-zinc-500 border border-zinc-200">
                                   CONDONADA
@@ -828,6 +979,109 @@ export function DetalleAlumnoModal({
                 </button>
               </div>
 
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal para Cambiar Método de Pago */}
+      {modalCambiarMetodo && targetEdicionMetodo && (
+        <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+          <div className="relative w-full max-w-md bg-white border border-zinc-200 rounded-2xl shadow-2xl p-5 space-y-4 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between pb-3 border-b border-zinc-200">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
+                  <CreditCard className="w-5 h-5" />
+                </div>
+                <div>
+                  <h4 className="text-sm font-bold text-zinc-950">
+                    Cambiar Método de Pago
+                  </h4>
+                  <p className="text-[11px] text-zinc-500 font-mono">
+                    {targetEdicionMetodo.tipo === 'MATRICULA'
+                      ? `Matrícula Inicial (${currentMatricula.codigo_matricula})`
+                      : `Cuota #${targetEdicionMetodo.numeroCuota}`}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setModalCambiarMetodo(false)}
+                className="p-1.5 rounded-lg text-zinc-400 hover:text-black hover:bg-zinc-100 transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {errorCambiarMetodo && (
+              <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs">
+                {errorCambiarMetodo}
+              </div>
+            )}
+
+            <form onSubmit={handleGuardarCambioMetodo} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-zinc-700 mb-2">
+                  Selecciona el método de pago real:
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  {[
+                    { id: 'EFECTIVO', label: 'Efectivo', icon: Banknote, color: 'hover:border-emerald-500', active: 'border-emerald-600 bg-emerald-50 text-emerald-950 ring-1 ring-emerald-600' },
+                    { id: 'YAPE', label: 'Yape', icon: Smartphone, color: 'hover:border-purple-500', active: 'border-purple-600 bg-purple-50 text-purple-950 ring-1 ring-purple-600' },
+                    { id: 'PLIN', label: 'Plin', icon: Smartphone, color: 'hover:border-sky-500', active: 'border-sky-600 bg-sky-50 text-sky-950 ring-1 ring-sky-600' },
+                    { id: 'TRANSFERENCIA', label: 'Transferencia BCP', icon: Building2, color: 'hover:border-blue-500', active: 'border-blue-600 bg-blue-50 text-blue-950 ring-1 ring-blue-600' },
+                    { id: 'TARJETA', label: 'Tarjeta POS', icon: CreditCard, color: 'hover:border-amber-500', active: 'border-amber-600 bg-amber-50 text-amber-950 ring-1 ring-amber-600' },
+                    { id: 'MIXTO', label: 'Pago Mixto', icon: Layers, color: 'hover:border-zinc-500', active: 'border-zinc-800 bg-zinc-100 text-zinc-950 ring-1 ring-zinc-800' },
+                  ].map((opc) => {
+                    const Icon = opc.icon;
+                    const isSelected = nuevoMetodoPago === opc.id;
+                    return (
+                      <button
+                        key={opc.id}
+                        type="button"
+                        onClick={() => setNuevoMetodoPago(opc.id)}
+                        className={`p-2.5 rounded-xl border text-left flex items-center gap-2 transition-all cursor-pointer ${
+                          isSelected ? opc.active : `border-zinc-200 bg-zinc-50/50 text-zinc-700 ${opc.color}`
+                        }`}
+                      >
+                        <Icon className="w-4 h-4 shrink-0" />
+                        <span className="text-xs font-bold">{opc.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-zinc-700 mb-1">
+                  N° Operación / Referencia (Opcional)
+                </label>
+                <input
+                  type="text"
+                  placeholder="Ej: 1984210"
+                  value={nuevoNumOperacion}
+                  onChange={(e) => setNuevoNumOperacion(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl bg-zinc-50 border border-zinc-200 text-xs font-mono focus:border-black outline-none"
+                />
+              </div>
+
+              <div className="flex gap-2 pt-2 border-t border-zinc-100">
+                <button
+                  type="button"
+                  onClick={() => setModalCambiarMetodo(false)}
+                  disabled={guardandoMetodo}
+                  className="flex-1 py-2.5 rounded-xl border border-zinc-200 text-zinc-700 font-bold text-xs hover:bg-zinc-50 transition-colors cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={guardandoMetodo}
+                  className="flex-1 py-2.5 rounded-xl bg-black hover:bg-zinc-800 text-white font-bold text-xs transition-colors flex items-center justify-center gap-1.5 shadow-sm active:scale-95 cursor-pointer disabled:opacity-50"
+                >
+                  {guardandoMetodo ? 'Guardando...' : 'Guardar Cambios'}
+                </button>
+              </div>
             </form>
           </div>
         </div>

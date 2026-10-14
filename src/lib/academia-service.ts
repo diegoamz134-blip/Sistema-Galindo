@@ -5,6 +5,7 @@
 
 import { supabase } from '@/lib/supabase';
 import { Alumno, Matricula, CuotaMatricula, Curso, EstadoAcademico, TurnoOption } from '@/types/database';
+import { normalizarMetodoPago, extraerNumeroOperacion } from '@/lib/utils';
 
 export interface MatriculaConDetalle extends Matricula {
   alumno: Alumno;
@@ -243,8 +244,13 @@ export async function getMatriculasConDetalle(
         return c;
       });
 
+      const metodoPago = normalizarMetodoPago(m.metodo_pago, m.notas);
+      const numeroOperacion = m.numero_operacion || extraerNumeroOperacion(undefined, m.notas);
+
       return {
         ...m,
+        metodo_pago: metodoPago,
+        numero_operacion: numeroOperacion,
         alumno,
         cuotas: cuotasActualizadas,
         curso: {
@@ -485,61 +491,91 @@ export async function crearMatriculaCompleta(
     let nuevaMatricula;
     const codigoMatricula = matExistente?.codigo_matricula || codigoMatriculaGenerado;
 
+    // Construir notas con tag de método de pago y n° operación para compatibilidad total
+    const metodoNormalizado = normalizarMetodoPago(input.metodo_pago, input.notas);
+    let notasLimpias = (input.notas || '')
+      .replace(/\[METODO(?:_PAGO)?:\s*[^\]]+\]/gi, '')
+      .replace(/\[(?:OP|OPERACION|NUM_OPERACION):\s*[^\]]+\]/gi, '')
+      .trim();
+
+    const tagMetodo = `[METODO: ${metodoNormalizado}]`;
+    const tagOp = input.numero_operacion?.trim() ? ` [OP: ${input.numero_operacion.trim()}]` : '';
+    const notasFinales = `${notasLimpias}${notasLimpias ? ' • ' : ''}${tagMetodo}${tagOp}`.trim();
+
+    const basePayload: Record<string, any> = {
+      codigo_matricula: codigoMatricula,
+      curso_id: input.curso_id,
+      curso_nombre: input.curso_nombre,
+      sede: input.sede,
+      turno: input.turno,
+      fecha_matricula: new Date().toISOString().split('T')[0],
+      fecha_inicio: input.fecha_inicio || new Date().toISOString().split('T')[0],
+      estado: 'EN_CURSO',
+      monto_matricula_pagado: montoMatriculaReal,
+      total_curso: totalCursoReal,
+      saldo_pendiente: saldoInicial,
+      kit_entregado: false,
+      fecha_entrega_kit: null,
+      notas: notasFinales || null,
+    };
+
+    const payloadConColumnas: Record<string, any> = {
+      ...basePayload,
+      metodo_pago: metodoNormalizado,
+      numero_operacion: input.numero_operacion?.trim() || null,
+    };
+
     if (matExistente) {
       // Limpiar cuotas previas si las hubiera antes de regenerar
       await supabase.from('cuotas_matricula').delete().eq('matricula_id', matExistente.id);
 
-      const { data: matActualizada, error: errAct } = await supabase
+      let matActualizada: any;
+      const { data: resAct, error: errAct } = await supabase
         .from('matriculas')
-        .update({
-          codigo_matricula: codigoMatricula,
-          curso_id: input.curso_id,
-          curso_nombre: input.curso_nombre,
-          sede: input.sede,
-          turno: input.turno,
-          fecha_matricula: new Date().toISOString().split('T')[0],
-          fecha_inicio: input.fecha_inicio || new Date().toISOString().split('T')[0],
-          estado: 'EN_CURSO',
-          monto_matricula_pagado: montoMatriculaReal,
-          total_curso: totalCursoReal,
-          saldo_pendiente: saldoInicial,
-          kit_entregado: false,
-          fecha_entrega_kit: null,
-          notas: input.notas || null,
-        })
+        .update(payloadConColumnas)
         .eq('id', matExistente.id)
         .select()
         .single();
 
-      if (errAct || !matActualizada) {
-        throw new Error(errAct?.message || 'Error al actualizar registro de matrícula');
+      if (errAct) {
+        // Fallback en caso de que las columnas metodo_pago/numero_operacion aún no existan en Supabase
+        const { data: resFallback, error: errFallback } = await supabase
+          .from('matriculas')
+          .update(basePayload)
+          .eq('id', matExistente.id)
+          .select()
+          .single();
+
+        if (errFallback || !resFallback) {
+          throw new Error(errFallback?.message || errAct.message || 'Error al actualizar registro de matrícula');
+        }
+        matActualizada = resFallback;
+      } else {
+        matActualizada = resAct;
       }
       nuevaMatricula = matActualizada;
     } else {
-      const { data: matCreada, error: errMat } = await supabase
+      let matCreada: any;
+      const { data: resIns, error: errMat } = await supabase
         .from('matriculas')
-        .insert({
-          codigo_matricula: codigoMatricula,
-          alumno_id: alumnoId,
-          curso_id: input.curso_id,
-          curso_nombre: input.curso_nombre,
-          sede: input.sede,
-          turno: input.turno,
-          fecha_matricula: new Date().toISOString().split('T')[0],
-          fecha_inicio: input.fecha_inicio || new Date().toISOString().split('T')[0],
-          estado: 'EN_CURSO',
-          monto_matricula_pagado: montoMatriculaReal,
-          total_curso: totalCursoReal,
-          saldo_pendiente: saldoInicial,
-          kit_entregado: false,
-          fecha_entrega_kit: null,
-          notas: input.notas || null,
-        })
+        .insert(payloadConColumnas)
         .select()
         .single();
 
-      if (errMat || !matCreada) {
-        throw new Error(errMat?.message || 'Error al crear registro de matrícula');
+      if (errMat) {
+        // Fallback en caso de que las columnas metodo_pago/numero_operacion aún no existan en Supabase
+        const { data: resFallback, error: errFallback } = await supabase
+          .from('matriculas')
+          .insert(basePayload)
+          .select()
+          .single();
+
+        if (errFallback || !resFallback) {
+          throw new Error(errFallback?.message || errMat.message || 'Error al crear registro de matrícula');
+        }
+        matCreada = resFallback;
+      } else {
+        matCreada = resIns;
       }
       nuevaMatricula = matCreada;
     }
@@ -574,13 +610,14 @@ export async function crearMatriculaCompleta(
       }
     }
 
-    // E. Registrar movimiento en Caja Chica si aplica
-    if (input.registrar_en_caja && input.monto_matricula_pagado > 0) {
+    // E. Registrar movimiento en Caja Chica si aplica (por defecto sí para mat. con pago)
+    const debeRegistrarCaja = input.registrar_en_caja ?? true;
+    if (debeRegistrarCaja && montoMatriculaReal > 0) {
       try {
         await registrarIngresoEnCaja({
-          monto: input.monto_matricula_pagado,
+          monto: montoMatriculaReal,
           concepto: `Matrícula ${codigoMatricula} - ${input.nombres} ${input.apellidos}`,
-          metodo_pago: input.metodo_pago,
+          metodo_pago: metodoNormalizado,
           referencia: codigoMatricula,
         });
       } catch (cajaErr) {
@@ -588,8 +625,15 @@ export async function crearMatriculaCompleta(
       }
     }
 
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new Event('galindo_matricula_registrada'));
+      window.dispatchEvent(new Event('galindo_pedido_web_realizado'));
+    }
+
     const matriculaCompleta: MatriculaConDetalle = {
       ...nuevaMatricula,
+      metodo_pago: metodoNormalizado,
+      numero_operacion: input.numero_operacion,
       alumno: {
         id: alumnoId,
         dni: input.dni,
@@ -879,6 +923,110 @@ export async function actualizarPlanFinancieroMatricula(
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : 'Error al actualizar plan financiero';
     return { ok: false, error: msg };
+  }
+}
+
+// -------------------------------------------------------------------------
+// 8. Actualizar Método de Pago de una Matrícula Inicial
+// -------------------------------------------------------------------------
+export async function actualizarMetodoPagoMatricula(
+  matriculaId: string,
+  nuevoMetodoPago: string,
+  numeroOperacion?: string
+): Promise<{ ok: boolean; error?: string; metodo_pago?: string }> {
+  try {
+    const metodoNormalizado = normalizarMetodoPago(nuevoMetodoPago);
+
+    // 1. Obtener la matrícula actual para preservar notas previas
+    const { data: mat, error: getErr } = await supabase
+      .from('matriculas')
+      .select('id, notas, monto_matricula_pagado, codigo_matricula')
+      .eq('id', matriculaId)
+      .maybeSingle();
+
+    if (getErr || !mat) {
+      throw new Error('No se encontró el registro de matrícula.');
+    }
+
+    // 2. Limpiar tags anteriores de método de notas y agregar el nuevo
+    let notasLimpias = (mat.notas || '')
+      .replace(/\[METODO(?:_PAGO)?:\s*[^\]]+\]/gi, '')
+      .replace(/\[(?:OP|OPERACION|NUM_OPERACION):\s*[^\]]+\]/gi, '')
+      .trim();
+
+    const tagMetodo = `[METODO: ${metodoNormalizado}]`;
+    const tagOp = numeroOperacion?.trim() ? ` [OP: ${numeroOperacion.trim()}]` : '';
+    const notasActualizadas = `${notasLimpias}${notasLimpias ? ' • ' : ''}${tagMetodo}${tagOp}`.trim();
+
+    // 3. Intentar actualizar con columnas metodo_pago y numero_operacion
+    const payloadConColumnas: Record<string, any> = {
+      notas: notasActualizadas || null,
+      metodo_pago: metodoNormalizado,
+    };
+    if (numeroOperacion !== undefined) {
+      payloadConColumnas.numero_operacion = numeroOperacion.trim() || null;
+    }
+
+    const { error: errUpdate } = await supabase
+      .from('matriculas')
+      .update(payloadConColumnas)
+      .eq('id', matriculaId);
+
+    // Si falló porque la columna aún no existe en Postgres, actualizamos solo notas
+    if (errUpdate) {
+      const { error: errSoloNotas } = await supabase
+        .from('matriculas')
+        .update({ notas: notasActualizadas || null })
+        .eq('id', matriculaId);
+
+      if (errSoloNotas) throw errSoloNotas;
+    }
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new Event('galindo_matricula_registrada'));
+      window.dispatchEvent(new Event('galindo_pedido_web_realizado'));
+    }
+
+    return { ok: true, metodo_pago: metodoNormalizado };
+  } catch (err: any) {
+    console.error('Error al actualizar método de pago de matrícula:', err);
+    return { ok: false, error: err.message || 'Error al actualizar método de pago.' };
+  }
+}
+
+// -------------------------------------------------------------------------
+// 9. Actualizar Método de Pago de una Cuota Pagada
+// -------------------------------------------------------------------------
+export async function actualizarMetodoPagoCuota(
+  cuotaId: string,
+  nuevoMetodoPago: string,
+  numeroOperacion?: string
+): Promise<{ ok: boolean; error?: string; metodo_pago?: string }> {
+  try {
+    const metodoNormalizado = normalizarMetodoPago(nuevoMetodoPago);
+    const payload: Record<string, any> = {
+      metodo_pago: metodoNormalizado,
+    };
+    if (numeroOperacion !== undefined) {
+      payload.numero_operacion = numeroOperacion.trim() || null;
+    }
+
+    const { error } = await supabase
+      .from('cuotas_matricula')
+      .update(payload)
+      .eq('id', cuotaId);
+
+    if (error) throw error;
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new Event('galindo_matricula_registrada'));
+      window.dispatchEvent(new Event('galindo_pedido_web_realizado'));
+    }
+
+    return { ok: true, metodo_pago: metodoNormalizado };
+  } catch (err: any) {
+    console.error('Error al actualizar método de pago de cuota:', err);
+    return { ok: false, error: err.message || 'Error al actualizar método de pago de cuota.' };
   }
 }
 

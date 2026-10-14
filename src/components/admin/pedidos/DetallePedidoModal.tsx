@@ -856,7 +856,20 @@ export function DetallePedidoModal({
 
                 <div className="pt-3 border-t border-zinc-200 grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
-                    <span className="text-[10px] text-zinc-400 block font-medium">Método de Pago:</span>
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] text-zinc-400 block font-medium">Método de Pago:</span>
+                      {onEditarClick && (
+                        <button
+                          type="button"
+                          onClick={() => onEditarClick(pedido)}
+                          className="inline-flex items-center gap-1 text-[10px] font-bold text-blue-600 hover:text-blue-800 hover:underline cursor-pointer"
+                          title="Editar método de pago o datos del cliente"
+                        >
+                          <Edit3 className="w-2.5 h-2.5" />
+                          <span>Editar</span>
+                        </button>
+                      )}
+                    </div>
                     <span className="inline-flex items-center gap-1.5 mt-1 px-2.5 py-1 rounded-md bg-zinc-200 text-zinc-900 font-bold text-xs">
                       <CreditCard className="w-3.5 h-3.5" />
                       <span>{pedido.metodo_pago}</span>

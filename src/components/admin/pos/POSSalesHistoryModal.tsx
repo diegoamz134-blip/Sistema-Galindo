@@ -30,6 +30,7 @@ import { formatCurrency } from '@/lib/utils';
 import { METODOS_PAGO_LABELS } from '@/lib/constants';
 import { exportarCierreCajaExcel } from '@/lib/excel-reportes-service';
 import { AnularPedidoModal } from '@/components/admin/pedidos/AnularPedidoModal';
+import { POSVentaDetalleModal } from './POSVentaDetalleModal';
 import { useSede } from '@/context/SedeContext';
 import { useAuth } from '@/context/AuthContext';
 
@@ -97,6 +98,7 @@ export function POSSalesHistoryModal({
   const [loading, setLoading] = useState(true);
   const [isExportando, setIsExportando] = useState(false);
   const [ventaParaAnular, setVentaParaAnular] = useState<any | null>(null);
+  const [ventaParaDetalle, setVentaParaDetalle] = useState<VentaRegistradaPOS | null>(null);
 
   // Carga paginada desde Supabase
   const cargarVentas = useCallback(async () => {
@@ -445,20 +447,22 @@ export function POSSalesHistoryModal({
               return (
                 <div
                   key={v.id || v.codigo_pedido}
-                  className={`p-3 rounded-2xl border transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs shadow-2xs ${
+                  onClick={() => setVentaParaDetalle(v)}
+                  className={`p-3 rounded-2xl border transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs shadow-2xs cursor-pointer group hover:shadow-md hover:scale-[1.002] active:scale-[0.999] ${
                     esAnulado
-                      ? 'bg-rose-50/40 border-rose-200/80 opacity-90'
+                      ? 'bg-rose-50/40 border-rose-200/80 opacity-90 hover:border-rose-300'
                       : v.tipo_transaccion === 'MATRICULA'
-                      ? 'bg-blue-50/40 border-blue-200/80 hover:border-blue-300'
+                      ? 'bg-blue-50/40 border-blue-200/80 hover:border-blue-400'
                       : v.tipo_transaccion === 'CUOTA'
-                      ? 'bg-purple-50/40 border-purple-200/80 hover:border-purple-300'
-                      : 'bg-white border-zinc-200 hover:border-zinc-300'
+                      ? 'bg-purple-50/40 border-purple-200/80 hover:border-purple-400'
+                      : 'bg-white border-zinc-200 hover:border-zinc-400'
                   }`}
+                  title="Click para ver detalle completo de lo vendido"
                 >
                   {/* Información del Ticket */}
                   <div className="space-y-1 min-w-0 flex-1">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-mono font-black text-xs text-black bg-zinc-100 px-1.5 py-0.5 rounded border border-zinc-200">
+                      <span className="font-mono font-black text-xs text-black bg-zinc-100 group-hover:bg-zinc-200 px-1.5 py-0.5 rounded border border-zinc-200 transition-colors">
                         #{v.codigo_pedido}
                       </span>
 
@@ -502,6 +506,10 @@ export function POSSalesHistoryModal({
                           <span>Entregado</span>
                         </span>
                       )}
+
+                      <span className="text-[10px] text-zinc-400 group-hover:text-zinc-700 font-medium transition-colors ml-auto hidden sm:inline">
+                        Ver detalle →
+                      </span>
                     </div>
 
                     <div className="font-bold text-zinc-900 truncate">
@@ -542,7 +550,10 @@ export function POSSalesHistoryModal({
                     {onSeleccionarParaReimprimir && (v as any).ventaCompleta && (!v.tipo_transaccion || v.tipo_transaccion === 'VENTA_POS') && (
                       <button
                         type="button"
-                        onClick={() => onSeleccionarParaReimprimir((v as any).ventaCompleta)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onSeleccionarParaReimprimir((v as any).ventaCompleta);
+                        }}
                         className="p-2 rounded-xl border border-zinc-300 hover:bg-zinc-100 text-zinc-800 text-xs font-bold transition-all shadow-2xs flex items-center gap-1 cursor-pointer active:scale-95"
                         title="Reimprimir Ticket oficial"
                       >
@@ -556,7 +567,8 @@ export function POSSalesHistoryModal({
                       !esAnulado ? (
                         <button
                           type="button"
-                          onClick={() =>
+                          onClick={(e) => {
+                            e.stopPropagation();
                             setVentaParaAnular({
                               id: v.id,
                               codigo_pedido: v.codigo_pedido,
@@ -564,8 +576,8 @@ export function POSSalesHistoryModal({
                               sede_nombre: sedeActiva === 'huancayo' ? 'Huancayo' : 'Ica',
                               cliente_nombre: v.cliente_nombre || 'Cliente Mostrador',
                               items: [],
-                            })
-                          }
+                            });
+                          }}
                           className="p-2 rounded-xl border border-rose-200 bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-bold transition-all shadow-2xs flex items-center gap-1 cursor-pointer active:scale-95"
                           title="Anular esta venta y devolver productos al inventario"
                         >
@@ -632,6 +644,25 @@ export function POSSalesHistoryModal({
             </button>
           </div>
         </div>
+
+        {/* Modal de Detalle Completo de lo Vendido */}
+        {ventaParaDetalle && (
+          <POSVentaDetalleModal
+            isOpen={Boolean(ventaParaDetalle)}
+            onClose={() => setVentaParaDetalle(null)}
+            venta={ventaParaDetalle}
+            onAnularVenta={(v) => {
+              setVentaParaAnular({
+                id: v.id,
+                codigo_pedido: v.codigo_pedido,
+                total: v.total,
+                sede_nombre: sedeActiva === 'huancayo' ? 'Huancayo' : 'Ica',
+                cliente_nombre: v.cliente_nombre || 'Cliente Mostrador',
+                items: [],
+              });
+            }}
+          />
+        )}
 
         {/* Modal de Anulación Formal con Auditoría y Kardex */}
         {ventaParaAnular && (
