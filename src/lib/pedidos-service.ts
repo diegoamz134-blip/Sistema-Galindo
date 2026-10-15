@@ -49,6 +49,7 @@ export interface FiltrosPedidosAdmin {
   canal?: 'TODOS' | 'WEB_TIENDA' | 'ACADEMIA' | 'POS_MOSTRADOR';
   sede?: 'TODAS' | 'Ica' | 'Huancayo';
   fecha?: 'TODAS' | 'HOY' | 'SEMANA' | 'MES';
+  limite?: number;
 }
 
 export interface EstadisticasPedidos {
@@ -135,6 +136,28 @@ export async function getPedidosAdmin(filtros?: FiltrosPedidosAdmin): Promise<Pe
       .select('*')
       .eq('estado', 'PAGADA')
       .order('fecha_pago', { ascending: false });
+
+    // Optimización SQL: Filtro de fecha a nivel de base de datos
+    if (filtros?.fecha && filtros.fecha !== 'TODAS') {
+      const ahora = new Date();
+      if (filtros.fecha === 'HOY') {
+        const hoyInicio = new Date(ahora.getFullYear(), ahora.getMonth(), ahora.getDate()).toISOString();
+        pedidosQuery = pedidosQuery.gte('creado_en', hoyInicio);
+        matriculasQuery = matriculasQuery.gte('creado_en', hoyInicio);
+        cuotasQuery = cuotasQuery.gte('fecha_pago', hoyInicio);
+      } else if (filtros.fecha === 'SEMANA') {
+        const hace7Dias = new Date(ahora.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
+        pedidosQuery = pedidosQuery.gte('creado_en', hace7Dias);
+        matriculasQuery = matriculasQuery.gte('creado_en', hace7Dias);
+        cuotasQuery = cuotasQuery.gte('fecha_pago', hace7Dias);
+      }
+    }
+
+    if (filtros?.limite) {
+      pedidosQuery = pedidosQuery.limit(filtros.limite);
+      matriculasQuery = matriculasQuery.limit(filtros.limite);
+      cuotasQuery = cuotasQuery.limit(filtros.limite);
+    }
 
     // Ejecutar las 3 consultas en paralelo
     const [pedidosRes, matriculasRes, cuotasRes] = await Promise.all([

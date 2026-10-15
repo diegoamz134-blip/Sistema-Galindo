@@ -42,6 +42,7 @@ export function RegistrarPagoCuotaModal({
       metodo_pago: metodoPago,
       numero_operacion: numeroOperacion.trim() || undefined,
       notas: notas.trim() || undefined,
+      registrar_en_caja: true,
     });
 
     if (res.ok) {

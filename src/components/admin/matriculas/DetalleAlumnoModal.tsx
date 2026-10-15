@@ -244,13 +244,17 @@ export function DetalleAlumnoModal({
     (!tieneCuotas || currentMatricula.cuotas.every((c) => c.estado === 'PAGADA' || c.estado === 'CONDONADA')) &&
     saldoPendienteBD <= 0;
 
-  // En liquidación al contado, todo el costo del curso fue abonado
-  const totalAbonado = esLiquidadoContado
-    ? Math.max(costoCursoEfectivo, pagadoMatricula + cuotasPagadasSuma)
-    : (pagadoMatricula + cuotasPagadasSuma);
+  // La matrícula es independiente de las cuotas del curso.
+  // El saldo de las cuotas solo disminuye con los pagos de cuotas.
+  const totalCuotasAbonadas = esLiquidadoContado
+    ? costoCursoEfectivo
+    : cuotasPagadasSuma;
 
-  const saldoEfectivo = esLiquidadoContado ? 0 : Math.max(0, costoCursoEfectivo - totalAbonado);
-  const montoCursoLiquidadoContado = Math.max(0, costoCursoEfectivo - pagadoMatricula);
+  const saldoEfectivo = esLiquidadoContado ? 0 : Math.max(0, costoCursoEfectivo - totalCuotasAbonadas);
+  const totalInversionEstudiante = pagadoMatricula + costoCursoEfectivo;
+  const totalRecaudadoEstudiante = pagadoMatricula + cuotasPagadasSuma;
+  const montoCursoLiquidadoContado = costoCursoEfectivo;
+  const totalAbonado = pagadoMatricula + totalCuotasAbonadas;
 
   const handleAbrirEditarPlan = () => {
     setNuevoTotalCurso(costoCursoEfectivo);
@@ -283,7 +287,7 @@ export function DetalleAlumnoModal({
         ...prev,
         total_curso: nuevoTotalCurso,
         monto_matricula_pagado: nuevoMontoMatricula,
-        saldo_pendiente: res.saldo_pendiente ?? (modalidadPlan === 'CONTADO' ? 0 : Math.max(0, nuevoTotalCurso - nuevoMontoMatricula)),
+        saldo_pendiente: res.saldo_pendiente ?? (modalidadPlan === 'CONTADO' ? 0 : nuevoTotalCurso),
         cuotas: res.cuotas || [],
       }));
       setEditarPlanOpen(false);
@@ -429,11 +433,11 @@ export function DetalleAlumnoModal({
                   </span>
                   <span className="text-zinc-300">•</span>
                   <span className="text-zinc-500">
-                    Abonado: <strong className="font-mono text-emerald-600">{formatCurrency(totalAbonado)}</strong>
+                    Cuotas Pagadas: <strong className="font-mono text-emerald-600">{formatCurrency(totalCuotasAbonadas)}</strong>
                   </span>
                   <span className="text-zinc-300">•</span>
                   <span className="text-zinc-500">
-                    Saldo: <strong className="font-mono text-amber-600">{formatCurrency(saldoEfectivo)}</strong>
+                    Saldo Cuotas: <strong className="font-mono text-amber-600">{formatCurrency(saldoEfectivo)}</strong>
                   </span>
                 </div>
               </div>

@@ -360,17 +360,24 @@ export interface ResultadoVentasPOSPaginado {
 // Helpers privados para combinar fuentes de ingreso en Ventas Turno
 // ---------------------------------------------------------------------------
 
-/** Obtiene matrículas del día como registros unificados para el arqueo */
+/** Obtiene matrículas del día o recientes como registros unificados para el arqueo */
 async function obtenerMatriculasParaTurno(
   sedeId: string | undefined,
-  fechaStr: string
+  fechaStr?: string
 ): Promise<VentaRegistradaPOS[]> {
   try {
-    const { data: matsData } = await supabase
+    let query = supabase
       .from('matriculas')
-      .select('id, codigo_matricula, alumno_id, sede, fecha_matricula, monto_matricula_pagado, estado, curso_nombre, notas')
-      .eq('fecha_matricula', fechaStr)
+      .select('id, codigo_matricula, alumno_id, sede, fecha_matricula, monto_matricula_pagado, estado, curso_nombre, notas, metodo_pago, creado_en')
       .order('fecha_matricula', { ascending: false });
+
+    if (fechaStr) {
+      query = query.eq('fecha_matricula', fechaStr);
+    } else {
+      query = query.limit(50);
+    }
+
+    const { data: matsData } = await query;
 
     if (!matsData || matsData.length === 0) return [];
 
@@ -403,7 +410,7 @@ async function obtenerMatriculasParaTurno(
         metodo_pago: metodoPago,
         metodo_entrega: 'ACADEMIA',
         estado: m.estado === 'RETIRADO' ? 'CANCELADO' : 'ENTREGADO',
-        creado_en: `${m.fecha_matricula}T17:00:00.000Z`,
+        creado_en: m.creado_en || `${m.fecha_matricula}T17:00:00.000Z`,
         items_resumen: `Matrícula: ${m.curso_nombre || 'Curso'}`,
         items_count: 1,
         tipo_transaccion: 'MATRICULA' as const,
@@ -415,21 +422,27 @@ async function obtenerMatriculasParaTurno(
   }
 }
 
-/** Obtiene pagos de cuotas del día como registros unificados para el arqueo */
+/** Obtiene pagos de cuotas del día o recientes como registros unificados para el arqueo */
 async function obtenerCuotasParaTurno(
   sedeId: string | undefined,
-  inicioISO: string,
-  finISO: string
+  inicioISO?: string,
+  finISO?: string
 ): Promise<VentaRegistradaPOS[]> {
   try {
-    const { data: cuotasData } = await supabase
+    let query = supabase
       .from('cuotas_matricula')
       .select('id, matricula_id, numero_cuota, monto, fecha_pago, metodo_pago, estado, notas')
       .eq('estado', 'PAGADA')
       .not('fecha_pago', 'is', null)
-      .gte('fecha_pago', inicioISO)
-      .lte('fecha_pago', finISO)
       .order('fecha_pago', { ascending: false });
+
+    if (inicioISO && finISO) {
+      query = query.gte('fecha_pago', inicioISO).lte('fecha_pago', finISO);
+    } else {
+      query = query.limit(50);
+    }
+
+    const { data: cuotasData } = await query;
 
     if (!cuotasData || cuotasData.length === 0) return [];
 
@@ -529,14 +542,14 @@ export async function getVentasPOSPaginadas({
       pedidosQuery = pedidosQuery.neq('estado', 'CANCELADO');
     }
 
-    // ── 2. Matrículas + cuotas (solo cuando hay filtro de fecha) ─────────
+    // ── 2. Matrículas + cuotas (del día o recientes) ────────────────────
     const matriculasPromise = hasFecha
       ? obtenerMatriculasParaTurno(sedeId, fechaStr)
-      : Promise.resolve([] as VentaRegistradaPOS[]);
+      : obtenerMatriculasParaTurno(sedeId);
 
     const cuotasPromise = hasFecha
       ? obtenerCuotasParaTurno(sedeId, inicioISO, finISO)
-      : Promise.resolve([] as VentaRegistradaPOS[]);
+      : obtenerCuotasParaTurno(sedeId);
 
     // Ejecutar las 3 consultas en paralelo
     const [pedidosResult, matriculas, cuotas] = await Promise.all([

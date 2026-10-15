@@ -14,6 +14,7 @@ import {
   Scissors,
   CheckCircle2,
   AlertTriangle,
+  GraduationCap,
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { Producto, MetodoPago } from '@/types/database';
@@ -26,6 +27,7 @@ import { POSCartTicket } from '@/components/admin/pos/POSCartTicket';
 import { POSPaymentModal } from '@/components/admin/pos/POSPaymentModal';
 import { POSThermalTicketModal } from '@/components/admin/pos/POSThermalTicketModal';
 import { POSSalesHistoryModal } from '@/components/admin/pos/POSSalesHistoryModal';
+import { POSCobroAcademiaModal } from '@/components/admin/pos/POSCobroAcademiaModal';
 
 export default function POSPage() {
   const { user, userMeta } = useAuth();
@@ -50,6 +52,7 @@ export default function POSPage() {
   const [isCobroModalOpen, setIsCobroModalOpen] = useState(false);
   const [isTicketModalOpen, setIsTicketModalOpen] = useState(false);
   const [isHistorialModalOpen, setIsHistorialModalOpen] = useState(false);
+  const [isCobroAcademiaModalOpen, setIsCobroAcademiaModalOpen] = useState(false);
   const [ultimaVenta, setUltimaVenta] = useState<VentaPOSData | null>(null);
 
   // Reloj digital en vivo
@@ -294,6 +297,17 @@ export default function POSPage() {
             <span className="text-zinc-400 truncate max-w-[140px]">{cajeroNombre}</span>
           </div>
 
+          {/* Botón Cobrar Mensualidad / Cuota de Alumno */}
+          <button
+            type="button"
+            onClick={() => setIsCobroAcademiaModalOpen(true)}
+            className="px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold flex items-center gap-1.5 shadow-sm cursor-pointer transition-all active:scale-95"
+            title="Cobrar mensualidad o cuota a un alumno de barbería"
+          >
+            <GraduationCap className="w-4 h-4" />
+            <span>Cobrar Mensualidad</span>
+          </button>
+
           {/* Botón Ventas del Turno */}
           <button
             type="button"
@@ -408,6 +422,16 @@ export default function POSPage() {
         isOpen={isHistorialModalOpen}
         onClose={() => setIsHistorialModalOpen(false)}
         onSeleccionarParaReimprimir={handleSeleccionarParaReimprimir}
+      />
+
+      {/* 4. Modal de Cobro de Mensualidad / Cuotas de Alumno */}
+      <POSCobroAcademiaModal
+        isOpen={isCobroAcademiaModalOpen}
+        onClose={() => setIsCobroAcademiaModalOpen(false)}
+        sedeId={sedeId}
+        onPagoCompletado={() => {
+          // El cobro impacta caja automáticamente
+        }}
       />
     </div>
   );

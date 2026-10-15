@@ -25,6 +25,8 @@ import {
   FileText,
   Filter,
   ArrowUpDown,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react';
 import { DetallePedidoModal } from '@/components/admin/pedidos/DetallePedidoModal';
 import { EditarPedidoModal } from '@/components/admin/pedidos/EditarPedidoModal';
@@ -41,6 +43,21 @@ import { formatCurrency } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
 import { useSede } from '@/context/SedeContext';
 import { useAuth } from '@/context/AuthContext';
+
+const POR_PAGINA_PEDIDOS = 10;
+
+function generarBotonesPaginacion(actual: number, total: number): (number | string)[] {
+  if (total <= 7) {
+    return Array.from({ length: total }, (_, i) => i + 1);
+  }
+  if (actual <= 4) {
+    return [1, 2, 3, 4, 5, '...', total];
+  }
+  if (actual >= total - 3) {
+    return [1, '...', total - 4, total - 3, total - 2, total - 1, total];
+  }
+  return [1, '...', actual - 1, actual, actual + 1, '...', total];
+}
 
 export default function AdminPedidosPage() {
   const { sedeActiva, sedeInfo } = useSede();
@@ -59,6 +76,14 @@ export default function AdminPedidosPage() {
   const [busqueda, setBusqueda] = useState('');
   const [filtroEstado, setFiltroEstado] = useState<'TODOS' | 'PENDIENTE' | 'PAGADO' | 'ENTREGADO' | 'CANCELADO'>('TODOS');
   const [filtroFecha, setFiltroFecha] = useState<'TODAS' | 'HOY' | 'SEMANA'>('TODAS');
+
+  // Control de paginación (10 pedidos por página)
+  const [paginaActual, setPaginaActual] = useState(1);
+
+  // Resetear a página 1 cuando cambia cualquier filtro, búsqueda o canal
+  useEffect(() => {
+    setPaginaActual(1);
+  }, [canalActivo, busqueda, filtroEstado, filtroFecha, sedeActiva]);
 
   // Modal de Detalle
   const [pedidoSeleccionado, setPedidoSeleccionado] = useState<PedidoCompleto | null>(null);
@@ -199,6 +224,18 @@ export default function AdminPedidosPage() {
 
     return { totalPedidos, pendientes, entregados, anulados, totalFacturado };
   }, [pedidosFiltrados]);
+
+  // Cálculos de paginación (10 registros por página)
+  const totalPaginasPedidos = Math.max(1, Math.ceil(pedidosFiltrados.length / POR_PAGINA_PEDIDOS));
+  const paginaValida = Math.min(Math.max(1, paginaActual), totalPaginasPedidos);
+
+  const pedidosPaginados = useMemo(() => {
+    const inicio = (paginaValida - 1) * POR_PAGINA_PEDIDOS;
+    return pedidosFiltrados.slice(inicio, inicio + POR_PAGINA_PEDIDOS);
+  }, [pedidosFiltrados, paginaValida]);
+
+  const primerPedidoVisible = pedidosFiltrados.length === 0 ? 0 : (paginaValida - 1) * POR_PAGINA_PEDIDOS + 1;
+  const ultimoPedidoVisible = Math.min(paginaValida * POR_PAGINA_PEDIDOS, pedidosFiltrados.length);
 
   // Manejadores de Modales
   const handleOpenDetalle = (ped: PedidoCompleto, tab: 'DETALLE' | 'WHATSAPP' | 'ACADEMIA' = 'DETALLE') => {
@@ -564,21 +601,22 @@ export default function AdminPedidosPage() {
             </div>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-zinc-50/80 border-b border-zinc-200 text-zinc-400 uppercase font-mono text-[10px] tracking-wider">
-                <tr>
-                  <th className="py-3 px-4">Ticket / Canal</th>
-                  <th className="py-3 px-4">Fecha & Sede</th>
-                  <th className="py-3 px-4">Cliente / Contacto</th>
-                  <th className="py-3 px-4">Ítems Adquiridos</th>
-                  <th className="py-3 px-4 text-right">Total Cobrado</th>
-                  <th className="py-3 px-4 text-center">Estado</th>
-                  <th className="py-3 px-4 text-right">Acciones</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-zinc-200/70">
-                {pedidosFiltrados.map((pedido) => {
+          <>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-zinc-50/80 border-b border-zinc-200 text-zinc-400 uppercase font-mono text-[10px] tracking-wider">
+                  <tr>
+                    <th className="py-3 px-4">Ticket / Canal</th>
+                    <th className="py-3 px-4">Fecha & Sede</th>
+                    <th className="py-3 px-4">Cliente / Contacto</th>
+                    <th className="py-3 px-4">Ítems Adquiridos</th>
+                    <th className="py-3 px-4 text-right">Total Cobrado</th>
+                    <th className="py-3 px-4 text-center">Estado</th>
+                    <th className="py-3 px-4 text-right">Acciones</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-zinc-200/70">
+                  {pedidosPaginados.map((pedido) => {
                   const canalInfo = getCanalBadge(pedido.tipo_canal);
                   const CanalRowIcon = canalInfo.icon;
                   const esAnulado = pedido.estado === 'CANCELADO';
@@ -742,8 +780,64 @@ export default function AdminPedidosPage() {
               </tbody>
             </table>
           </div>
-        )}
-      </div>
+
+          {/* Barra de Paginación Inteligente (10 pedidos por página) */}
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-5 py-3.5 bg-zinc-50/80 border-t border-zinc-200 text-xs">
+            <div className="text-zinc-500 font-medium">
+              Mostrando <span className="font-bold text-zinc-900">{primerPedidoVisible}</span> a{' '}
+              <span className="font-bold text-zinc-900">{ultimoPedidoVisible}</span> de{' '}
+              <span className="font-bold text-zinc-900 font-mono">{pedidosFiltrados.length}</span> registros
+            </div>
+
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => setPaginaActual((prev) => Math.max(1, prev - 1))}
+                disabled={paginaValida <= 1 || cargando}
+                className="px-3 py-1.5 rounded-lg border border-zinc-200 bg-white hover:bg-zinc-100 text-zinc-700 disabled:opacity-40 disabled:cursor-not-allowed font-medium transition-all shadow-2xs flex items-center gap-1 cursor-pointer"
+              >
+                <ChevronLeft className="w-3.5 h-3.5" />
+                <span>Anterior</span>
+              </button>
+
+              <div className="flex items-center gap-1">
+                {generarBotonesPaginacion(paginaValida, totalPaginasPedidos).map((p, idx) =>
+                  p === '...' ? (
+                    <span key={`dots-${idx}`} className="px-1.5 text-zinc-400 font-mono">
+                      ...
+                    </span>
+                  ) : (
+                    <button
+                      key={`page-${p}`}
+                      type="button"
+                      onClick={() => setPaginaActual(Number(p))}
+                      disabled={cargando}
+                      className={`min-w-7 h-7 px-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                        paginaValida === p
+                          ? 'bg-zinc-950 text-white shadow-2xs'
+                          : 'bg-white border border-zinc-200 text-zinc-700 hover:bg-zinc-100'
+                      }`}
+                    >
+                      {p}
+                    </button>
+                  )
+                )}
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setPaginaActual((prev) => Math.min(totalPaginasPedidos, prev + 1))}
+                disabled={paginaValida >= totalPaginasPedidos || cargando}
+                className="px-3 py-1.5 rounded-lg border border-zinc-200 bg-white hover:bg-zinc-100 text-zinc-700 disabled:opacity-40 disabled:cursor-not-allowed font-medium transition-all shadow-2xs flex items-center gap-1 cursor-pointer"
+              >
+                <span>Siguiente</span>
+                <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+        </>
+      )}
+    </div>
 
       {/* ========================================================================= */}
       {/* MODALES DEL MÓDULO */}

@@ -52,12 +52,12 @@ export function ReciboMatriculaTicket({
     (!tieneCuotas || matricula.cuotas.every((c) => c.estado === 'PAGADA' || c.estado === 'CONDONADA')) &&
     Number(matricula.saldo_pendiente) <= 0;
 
-  const totalAbonado = esLiquidadoContado
-    ? Math.max(costoTotalEfectivo, pagadoMatricula + cuotasPagadas)
-    : (pagadoMatricula + cuotasPagadas);
+  // La matrícula es independiente de las cuotas del curso
+  const totalCuotasPagadas = (matricula.cuotas || [])
+    .filter((c) => c.estado === 'PAGADA')
+    .reduce((acc, c) => acc + (Number(c.monto) || 0), 0);
 
-  const saldoPendiente = esLiquidadoContado ? 0 : Math.max(0, costoTotalEfectivo - totalAbonado);
-  const montoCursoLiquidadoContado = Math.max(0, costoTotalEfectivo - pagadoMatricula);
+  const saldoPendienteCuotas = esLiquidadoContado ? 0 : Math.max(0, costoTotalEfectivo - totalCuotasPagadas);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm overflow-y-auto">
@@ -200,11 +200,7 @@ export function ReciboMatriculaTicket({
           {/* Resumen Financiero */}
           <div className="text-[11px] space-y-1.5 pb-3 border-b border-dashed border-zinc-300">
             <div className="flex justify-between text-zinc-600">
-              <span>Costo Total del Curso:</span>
-              <span>{formatCurrency(costoTotalEfectivo)}</span>
-            </div>
-            <div className="flex justify-between text-zinc-600">
-              <span>Matrícula Inicial:</span>
+              <span>Derecho de Matrícula (Pago Inicial):</span>
               <span className="font-semibold text-zinc-900">
                 {formatCurrency(pagadoMatricula)}
                 {pagadoMatricula > 0 && (
@@ -214,19 +210,19 @@ export function ReciboMatriculaTicket({
                 )}
               </span>
             </div>
-            {esLiquidadoContado && montoCursoLiquidadoContado > 0 && (
-              <div className="flex justify-between text-emerald-800 font-semibold">
-                <span>Liquidación Curso (Contado):</span>
-                <span>{formatCurrency(montoCursoLiquidadoContado)}</span>
+            <div className="flex justify-between text-zinc-600">
+              <span>Costo Total de Mensualidades:</span>
+              <span className="font-semibold">{formatCurrency(costoTotalEfectivo)}</span>
+            </div>
+            {totalCuotasPagadas > 0 && (
+              <div className="flex justify-between text-emerald-700 font-semibold">
+                <span>Mensualidades Abonadas:</span>
+                <span>{formatCurrency(totalCuotasPagadas)}</span>
               </div>
             )}
-            <div className="flex justify-between font-bold text-emerald-700">
-              <span>Total Abonado a la Fecha:</span>
-              <span>{formatCurrency(totalAbonado)}</span>
-            </div>
             <div className="flex justify-between font-bold text-sm border-t border-zinc-200 pt-1 text-zinc-950">
-              <span>SALDO PENDIENTE:</span>
-              <span>{formatCurrency(saldoPendiente)}</span>
+              <span>SALDO PENDIENTE CUOTAS:</span>
+              <span className="text-amber-700 font-mono">{formatCurrency(saldoPendienteCuotas)}</span>
             </div>
             {esLiquidadoContado && (
               <div className="text-center py-1 px-2 rounded bg-emerald-50 text-emerald-800 font-bold text-[10px] mt-1 border border-emerald-200">

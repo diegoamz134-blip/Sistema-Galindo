@@ -19,7 +19,7 @@ export interface CreateProductInput {
 }
 
 // -------------------------------------------------------------------------
-// 1. Obtener productos paginados para el Panel de Administración (20 por página)
+// 1. Obtener productos paginados para el Panel de Administración (10 por página)
 // -------------------------------------------------------------------------
 export interface AdminProductsPaginadoParams {
   pagina?: number;
@@ -40,7 +40,7 @@ export async function getAdminProductsPaginado(
   params?: AdminProductsPaginadoParams
 ): Promise<AdminProductsPaginadoRespuesta> {
   const pagina = Math.max(1, params?.pagina || 1);
-  const porPagina = params?.porPagina || 20;
+  const porPagina = params?.porPagina || 10;
   const desde = (pagina - 1) * porPagina;
   const hasta = desde + porPagina - 1;
 

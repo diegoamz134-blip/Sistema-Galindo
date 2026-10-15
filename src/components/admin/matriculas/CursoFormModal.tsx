@@ -706,7 +706,7 @@ export function CursoFormModal({
                     </button>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  <div className="grid grid-cols-1 sm:grid-cols-4 gap-2.5">
                     <div>
                       <label className="text-[10px] font-semibold text-zinc-600 block mb-1">
                         Horario de Clases
@@ -729,6 +729,32 @@ export function CursoFormModal({
                         onChange={(e) => handleUpdateTurno(idx, 'dias', e.target.value)}
                         placeholder="Ej. Lunes, Miércoles y Viernes"
                         className="w-full px-3 py-1.5 rounded-lg border border-zinc-200 text-xs text-zinc-800 bg-zinc-50/50 focus:border-black outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-semibold text-zinc-600 block mb-1">
+                        Mensualidad (S/)
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        value={t.costo_mensualidad ?? ''}
+                        onChange={(e) => handleUpdateTurno(idx, 'costo_mensualidad', e.target.value ? Number(e.target.value) : undefined)}
+                        placeholder={costoMensualidad || '250'}
+                        className="w-full px-3 py-1.5 rounded-lg border border-zinc-200 text-xs font-mono font-bold text-emerald-800 bg-zinc-50/50 focus:border-black outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-semibold text-zinc-600 block mb-1">
+                        Duración (Meses)
+                      </label>
+                      <input
+                        type="number"
+                        min="1"
+                        value={t.duracion_meses ?? ''}
+                        onChange={(e) => handleUpdateTurno(idx, 'duracion_meses', e.target.value ? Number(e.target.value) : undefined)}
+                        placeholder="2 o 3 meses"
+                        className="w-full px-3 py-1.5 rounded-lg border border-zinc-200 text-xs font-mono font-semibold text-zinc-800 bg-zinc-50/50 focus:border-black outline-none"
                       />
                     </div>
                   </div>

@@ -477,9 +477,10 @@ export async function crearMatriculaCompleta(
     // C. Calcular saldo y registrar o actualizar Matrícula
     const totalCursoReal = Math.max(0, Number(input.total_curso) || 0) || (input.numero_cuotas === 0 ? (Number(input.monto_matricula_pagado) || 0) : 750);
     const montoMatriculaReal = Math.max(0, Number(input.monto_matricula_pagado) || 0);
+    // La matrícula es un derecho de inscripción independiente que NO se descuenta de las mensualidades
     const saldoInicial = input.numero_cuotas === 0
       ? 0
-      : Math.max(0, totalCursoReal - montoMatriculaReal);
+      : totalCursoReal;
 
     // Buscar si ya existía una matrícula provisional para este alumno
     const { data: matExistente } = await supabase
@@ -585,6 +586,9 @@ export async function crearMatriculaCompleta(
     if (input.numero_cuotas > 0 && saldoInicial > 0) {
       const cuotasParaInsertar = [];
       const fechaBase = new Date();
+      const cuotaIndividual = input.monto_por_cuota > 0
+        ? input.monto_por_cuota
+        : Math.round((totalCursoReal / input.numero_cuotas) * 10) / 10;
 
       for (let i = 1; i <= input.numero_cuotas; i++) {
         const fechaVence = new Date(fechaBase);
@@ -594,7 +598,7 @@ export async function crearMatriculaCompleta(
         cuotasParaInsertar.push({
           matricula_id: nuevaMatricula.id,
           numero_cuota: i,
-          monto: input.monto_por_cuota,
+          monto: cuotaIndividual,
           fecha_vencimiento: fechaStr,
           estado: 'PENDIENTE',
         });
@@ -666,6 +670,7 @@ export async function pagarCuota(
 ): Promise<{ ok: boolean; error?: string }> {
   try {
     const fechaPago = new Date().toISOString();
+    const metodoNormalizado = normalizarMetodoPago(input.metodo_pago);
 
     // A. Actualizar estado de la cuota en Supabase
     const { error: errCuota } = await supabase
@@ -673,7 +678,7 @@ export async function pagarCuota(
       .update({
         estado: 'PAGADA',
         fecha_pago: fechaPago,
-        metodo_pago: input.metodo_pago,
+        metodo_pago: metodoNormalizado,
         numero_operacion: input.numero_operacion || null,
         notas: input.notas || null,
       })
@@ -686,9 +691,21 @@ export async function pagarCuota(
     // B. Actualizar saldo de la matrícula
     const { data: matriculaActual } = await supabase
       .from('matriculas')
-      .select('saldo_pendiente, total_curso, codigo_matricula')
+      .select('id, saldo_pendiente, total_curso, codigo_matricula, sede, alumno_id')
       .eq('id', input.matricula_id)
       .single();
+
+    let nombreAlumno = 'Alumno';
+    if (matriculaActual?.alumno_id) {
+      const { data: alData } = await supabase
+        .from('alumnos')
+        .select('nombres, apellidos')
+        .eq('id', matriculaActual.alumno_id)
+        .maybeSingle();
+      if (alData) {
+        nombreAlumno = `${alData.nombres} ${alData.apellidos || ''}`.trim();
+      }
+    }
 
     if (matriculaActual) {
       const nuevoSaldo = Math.max(0, Number(matriculaActual.saldo_pendiente) - Number(input.monto));
@@ -700,18 +717,26 @@ export async function pagarCuota(
         .eq('id', input.matricula_id);
     }
 
-    // C. Opcional: registrar en Caja Chica
-    if (input.registrar_en_caja && input.monto > 0) {
+    // C. Registrar en Caja Chica y Movimientos de Caja (por defecto SIEMPRE true al cobrar cuota)
+    const debeRegistrarCaja = input.registrar_en_caja ?? true;
+    if (debeRegistrarCaja && Number(input.monto) > 0) {
       try {
         await registrarIngresoEnCaja({
-          monto: input.monto,
-          concepto: `Pago Cuota - ${matriculaActual?.codigo_matricula || input.matricula_id}`,
-          metodo_pago: input.metodo_pago,
+          monto: Number(input.monto),
+          concepto: `Pago Cuota ${matriculaActual?.codigo_matricula || ''} - ${nombreAlumno}`,
+          metodo_pago: metodoNormalizado,
           referencia: input.numero_operacion || input.cuota_id,
+          tipo: 'INGRESO_CUOTA',
         });
       } catch (cajaErr) {
         console.warn('No se pudo registrar pago en caja:', cajaErr);
       }
+    }
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new Event('galindo_matricula_registrada'));
+      window.dispatchEvent(new Event('galindo_pedido_web_realizado'));
+      window.dispatchEvent(new Event('galindo_caja_actualizada'));
     }
 
     return { ok: true };
@@ -851,8 +876,8 @@ export async function actualizarPlanFinancieroMatricula(
         .order('numero_cuota', { ascending: true });
 
       const totalPagadoEnCuotas = (cuotasPagadas || []).reduce((acc, c) => acc + (Number(c.monto) || 0), 0);
-      const totalAbonadoPrevio = montoMatricula + totalPagadoEnCuotas;
-      const saldoRestante = Math.max(0, totalCurso - totalAbonadoPrevio);
+      // La matrícula es independiente y no se descuenta de las cuotas del curso
+      const saldoRestante = Math.max(0, totalCurso - totalPagadoEnCuotas);
 
       // Actualizar registro de la matrícula con el nuevo saldo
       const { error: errMat } = await supabase
@@ -1031,13 +1056,14 @@ export async function actualizarMetodoPagoCuota(
 }
 
 // -------------------------------------------------------------------------
-// Helper: Registrar ingreso en caja chica si hay una abierta
+// Helper: Registrar ingreso en caja chica y movimientos de caja
 // -------------------------------------------------------------------------
 async function registrarIngresoEnCaja(params: {
   monto: number;
   concepto: string;
   metodo_pago: string;
   referencia?: string;
+  tipo?: string;
 }) {
   const { data: cajaAbierta } = await supabase
     .from('cajas_chicas')
@@ -1047,40 +1073,41 @@ async function registrarIngresoEnCaja(params: {
     .limit(1)
     .maybeSingle();
 
-  if (!cajaAbierta) return;
-
   const esEfectivo = params.metodo_pago.toUpperCase() === 'EFECTIVO';
+  const tipoMovimiento = params.tipo || 'INGRESO_MATRICULA';
 
-  // Registrar movimiento en movimientos_caja si la tabla existe
+  // Registrar movimiento en movimientos_caja (siempre, para que el arqueo de ventas lo tenga)
   try {
     await supabase.from('movimientos_caja').insert({
-      caja_id: cajaAbierta.id,
-      tipo: 'INGRESO_MATRICULA',
+      caja_id: cajaAbierta?.id || null,
+      tipo: tipoMovimiento,
       monto: params.monto,
       metodo_pago: params.metodo_pago,
       concepto: params.concepto,
       referencia_id: params.referencia || null,
       fecha: new Date().toISOString(),
     });
-  } catch {
-    // Si la tabla aún no existe o falla, continuar sin bloquear
+  } catch (movErr) {
+    console.warn('No se pudo insertar en movimientos_caja:', movErr);
   }
 
-  // Actualizar totales de caja
-  if (esEfectivo) {
-    await supabase
-      .from('cajas_chicas')
-      .update({
-        total_ingresos_efectivo: Number(cajaAbierta.total_ingresos_efectivo || 0) + Number(params.monto),
-      })
-      .eq('id', cajaAbierta.id);
-  } else {
-    await supabase
-      .from('cajas_chicas')
-      .update({
-        total_ingresos_digital: Number(cajaAbierta.total_ingresos_digital || 0) + Number(params.monto),
-      })
-      .eq('id', cajaAbierta.id);
+  // Actualizar totales de caja abierta si está disponible
+  if (cajaAbierta) {
+    if (esEfectivo) {
+      await supabase
+        .from('cajas_chicas')
+        .update({
+          total_ingresos_efectivo: Number(cajaAbierta.total_ingresos_efectivo || 0) + Number(params.monto),
+        })
+        .eq('id', cajaAbierta.id);
+    } else {
+      await supabase
+        .from('cajas_chicas')
+        .update({
+          total_ingresos_digital: Number(cajaAbierta.total_ingresos_digital || 0) + Number(params.monto),
+        })
+        .eq('id', cajaAbierta.id);
+    }
   }
 }
 

@@ -98,7 +98,7 @@ async function comprimirFotoProducto(
   });
 }
 
-const POR_PAGINA = 20;
+const POR_PAGINA = 10;
 
 function generarBotonesPaginacion(actual: number, total: number): (number | string)[] {
   if (total <= 7) {
@@ -126,7 +126,7 @@ export default function AdminProductosPage() {
   const [showModalExcel, setShowModalExcel] = useState(false);
   const [showModalCategoria, setShowModalCategoria] = useState(false);
 
-  // Paginación inteligente (20 productos por página)
+  // Paginación inteligente (10 productos por página)
   const [pagina, setPagina] = useState(1);
   const [totalProductos, setTotalProductos] = useState(0);
   const [totalPaginas, setTotalPaginas] = useState(1);
@@ -172,7 +172,7 @@ export default function AdminProductosPage() {
     setPagina(1);
   }, [sedeActiva]);
 
-  // Cargar datos paginados (exactamente 20 por página)
+  // Cargar datos paginados (exactamente 10 por página)
   const cargarDatos = useCallback(
     async (targetPage = pagina, silencioso = false) => {
       if (!silencioso) setIsLoading(true);
@@ -753,7 +753,7 @@ export default function AdminProductosPage() {
             </table>
           </div>
 
-          {/* Barra de Paginación Inteligente (20 productos por página) */}
+          {/* Barra de Paginación Inteligente (10 productos por página) */}
           <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-5 py-3.5 bg-zinc-50/80 border-t border-zinc-200 text-xs">
             <div className="text-zinc-500 font-medium">
               Mostrando <span className="font-bold text-zinc-900">{primerItemVisible}</span> a{' '}

@@ -66,7 +66,8 @@ export function NuevaMatriculaModal({
       if (list.length > 0) {
         const prim = list[0];
         setCursoSeleccionadoId(prim.id);
-        setTotalCurso(prim.costo_total_contado || 750);
+        const mensualidad = prim.costo_mensualidad || 250;
+        setTotalCurso(mensualidad * 2);
         setMontoMatricula(prim.costo_matricula || 80);
       }
       setCargandoCursos(false);
@@ -79,14 +80,33 @@ export function NuevaMatriculaModal({
     setCursoSeleccionadoId(cId);
     const encontrado = cursos.find((c) => c.id === cId);
     if (encontrado) {
-      setTotalCurso(encontrado.costo_total_contado || 750);
       setMontoMatricula(encontrado.costo_matricula || 80);
+      const mensualidad = encontrado.costo_mensualidad || 250;
+      if (numeroCuotas === 0) {
+        setTotalCurso(encontrado.costo_total_contado || mensualidad * 2);
+      } else {
+        setTotalCurso(mensualidad * numeroCuotas);
+      }
     }
   };
 
-  // Cálculos automáticos
-  const saldoPendiente = numeroCuotas === 0 ? 0 : Math.max(0, totalCurso - montoMatricula);
-  const montoPorCuota = numeroCuotas > 0 ? Math.round((saldoPendiente / numeroCuotas) * 10) / 10 : 0;
+  // Al cambiar número de cuotas, sincronizar total sugerido
+  const handleCuotasChange = (num: number) => {
+    setNumeroCuotas(num);
+    const cursoObj = cursos.find((c) => c.id === cursoSeleccionadoId);
+    const mensualidad = cursoObj?.costo_mensualidad || 250;
+    if (num === 0) {
+      setTotalCurso(cursoObj?.costo_total_contado || mensualidad * 2);
+    } else {
+      setTotalCurso(mensualidad * num);
+    }
+  };
+
+  // Cálculos automáticos:
+  // IMPORTANTE: La matrícula es independiente y NO se descuenta de las cuotas del curso.
+  const saldoPendiente = numeroCuotas === 0 ? 0 : Math.max(0, totalCurso);
+  const montoPorCuota = numeroCuotas > 0 ? Math.round((totalCurso / numeroCuotas) * 10) / 10 : 0;
+  const inversionTotal = Number(montoMatricula || 0) + Number(totalCurso || 0);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -410,21 +430,8 @@ export function NuevaMatriculaModal({
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
                 <label className="block font-semibold text-zinc-700 mb-1">
-                  Costo Total del Curso (S/)
-                </label>
-                <input
-                  type="number"
-                  step="1"
-                  required
-                  value={totalCurso}
-                  onChange={(e) => setTotalCurso(parseFloat(e.target.value) || 0)}
-                  className="w-full px-3 py-2 rounded-lg bg-zinc-50 border border-zinc-300 text-zinc-900 font-mono font-bold focus:border-black outline-none"
-                />
-              </div>
-
-              <div>
-                <label className="block font-semibold text-zinc-700 mb-1">
-                  Matrícula Pagada Hoy (S/) *
+                  Matrícula Hoy (S/) *
+                  <span className="text-[10px] text-zinc-400 font-normal block">Derecho de inscripción único</span>
                 </label>
                 <input
                   type="number"
@@ -438,38 +445,69 @@ export function NuevaMatriculaModal({
 
               <div>
                 <label className="block font-semibold text-zinc-700 mb-1">
-                  Número de Cuotas
+                  Modalidad de Pago
+                  <span className="text-[10px] text-zinc-400 font-normal block">Plan de cuotas</span>
                 </label>
                 <select
                   value={numeroCuotas}
-                  onChange={(e) => setNumeroCuotas(parseInt(e.target.value) || 0)}
+                  onChange={(e) => handleCuotasChange(parseInt(e.target.value) || 0)}
                   className="w-full px-3 py-2 rounded-lg bg-zinc-50 border border-zinc-300 text-zinc-900 font-semibold focus:border-black outline-none"
                 >
                   <option value={1}>1 Cuota mensual</option>
                   <option value={2}>2 Cuotas mensuales</option>
                   <option value={3}>3 Cuotas mensuales</option>
+                  <option value={4}>4 Cuotas mensuales</option>
                   <option value={0}>0 (Pago Contado Completo)</option>
                 </select>
+              </div>
+
+              <div>
+                <label className="block font-semibold text-zinc-700 mb-1">
+                  Costo Total del Curso (S/)
+                  <span className="text-[10px] text-zinc-400 font-normal block">Mensualidades acumuladas</span>
+                </label>
+                <input
+                  type="number"
+                  step="1"
+                  required
+                  value={totalCurso}
+                  onChange={(e) => setTotalCurso(parseFloat(e.target.value) || 0)}
+                  className="w-full px-3 py-2 rounded-lg bg-zinc-50 border border-zinc-300 text-zinc-900 font-mono font-bold focus:border-black outline-none"
+                />
               </div>
             </div>
 
             {/* Resumen dinámico del cronograma */}
             <div className="p-3.5 rounded-xl bg-zinc-50 border border-zinc-200 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
-              <div>
-                <span className="text-zinc-500">Saldo restante a financiar: </span>
-                <span className="font-mono font-bold text-zinc-900 text-sm">
-                  {formatCurrency(saldoPendiente)}
-                </span>
+              <div className="space-y-1">
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+                  <div>
+                    <span className="text-zinc-500">Matrícula Cobrada Hoy: </span>
+                    <span className="font-mono font-bold text-emerald-700">{formatCurrency(montoMatricula)}</span>
+                  </div>
+                  <div>
+                    <span className="text-zinc-500">Saldo a Financiar: </span>
+                    <span className="font-mono font-bold text-zinc-900 text-sm">
+                      {formatCurrency(saldoPendiente)}
+                    </span>
+                  </div>
+                </div>
+
                 {numeroCuotas > 0 && saldoPendiente > 0 ? (
-                  <p className="text-[11px] text-zinc-500 mt-0.5">
-                    Se generarán <strong className="text-zinc-800">{numeroCuotas} cuotas</strong> de{' '}
-                    <strong className="text-zinc-900 font-mono">{formatCurrency(montoPorCuota)}</strong> cada 30 días.
+                  <p className="text-[11px] text-zinc-600">
+                    Se generarán <strong className="text-zinc-900 font-semibold">{numeroCuotas} cuotas</strong> de{' '}
+                    <strong className="text-zinc-950 font-mono font-bold">{formatCurrency(montoPorCuota)}</strong> cada mes.{' '}
+                    <span className="text-zinc-400 font-normal">(La matrícula no descuenta las cuotas).</span>
                   </p>
                 ) : numeroCuotas === 0 ? (
-                  <p className="text-[11px] text-emerald-700 font-medium mt-0.5">
+                  <p className="text-[11px] text-emerald-700 font-medium">
                     ✓ Pago al contado: Curso liquidado en su totalidad. Saldo pendiente: S/ 0.00.
                   </p>
                 ) : null}
+
+                <p className="text-[11px] text-zinc-500 font-mono">
+                  Inversión total del alumno: <strong>{formatCurrency(inversionTotal)}</strong> (Matrícula {formatCurrency(montoMatricula)} + Curso {formatCurrency(totalCurso)})
+                </p>
               </div>
 
               <div className="flex items-center gap-2 w-full sm:w-auto">
