@@ -4,6 +4,7 @@ import { format, subDays, startOfMonth, startOfYear, isAfter } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { matchSede } from '@/lib/academia-service';
 import { normalizarMetodoPago } from '@/lib/utils';
+import { parseDesglosePagoCruzado } from '@/lib/pos-service';
 
 export type RangoFecha = 'HOY' | '7_DIAS' | 'MES' | 'AÑO' | 'TODO';
 export type SedeFiltro = 'ica' | 'huancayo' | 'TODAS';
@@ -196,9 +197,21 @@ export async function getReporteFinanciero(
 
       // Métodos de pago
       const metodo = (ped.metodo_pago || 'EFECTIVO').toUpperCase();
-      if (metodo.includes('EFECTIVO') || metodo.includes('MIXTO')) efectivo += monto;
-      else if (metodo.includes('YAPE') || metodo.includes('PLIN')) yapePlin += monto;
-      else transferencia += monto;
+      if (metodo === 'EFECTIVO') {
+        efectivo += monto;
+      } else if (metodo === 'MIXTO') {
+        const desglose = parseDesglosePagoCruzado(ped.notas, monto);
+        efectivo += desglose.efectivo;
+        if (desglose.canalDigital === 'TARJETA' || desglose.canalDigital === 'TRANSFERENCIA') {
+          transferencia += desglose.digital;
+        } else {
+          yapePlin += desglose.digital;
+        }
+      } else if (metodo.includes('YAPE') || metodo.includes('PLIN')) {
+        yapePlin += monto;
+      } else {
+        transferencia += monto;
+      }
 
       // Academia vs Tienda
       const esPos = ped.codigo_pedido?.startsWith('POS-');
@@ -235,9 +248,21 @@ export async function getReporteFinanciero(
         ingresosBrutos += monto;
         academiaIngresos += monto;
         const metodo = normalizarMetodoPago(m.metodo_pago, m.notas);
-        if (metodo.includes('EFECTIVO') || metodo.includes('MIXTO')) efectivo += monto;
-        else if (metodo.includes('YAPE') || metodo.includes('PLIN')) yapePlin += monto;
-        else transferencia += monto;
+        if (metodo === 'MIXTO') {
+          const desglose = parseDesglosePagoCruzado(m.notas, monto);
+          efectivo += desglose.efectivo;
+          if (desglose.canalDigital === 'TARJETA' || desglose.canalDigital === 'TRANSFERENCIA') {
+            transferencia += desglose.digital;
+          } else {
+            yapePlin += desglose.digital;
+          }
+        } else if (metodo === 'EFECTIVO') {
+          efectivo += monto;
+        } else if (metodo === 'YAPE' || metodo === 'PLIN') {
+          yapePlin += monto;
+        } else {
+          transferencia += monto;
+        }
         addToMap(m.creado_en || m.fecha_matricula || new Date().toISOString(), 'ingreso', monto);
       }
     });
@@ -249,9 +274,21 @@ export async function getReporteFinanciero(
         ingresosBrutos += monto;
         academiaIngresos += monto;
         const metodo = normalizarMetodoPago(c.metodo_pago, c.notas);
-        if (metodo.includes('EFECTIVO') || metodo.includes('MIXTO')) efectivo += monto;
-        else if (metodo.includes('YAPE') || metodo.includes('PLIN')) yapePlin += monto;
-        else transferencia += monto;
+        if (metodo === 'MIXTO') {
+          const desglose = parseDesglosePagoCruzado(c.notas, monto);
+          efectivo += desglose.efectivo;
+          if (desglose.canalDigital === 'TARJETA' || desglose.canalDigital === 'TRANSFERENCIA') {
+            transferencia += desglose.digital;
+          } else {
+            yapePlin += desglose.digital;
+          }
+        } else if (metodo === 'EFECTIVO') {
+          efectivo += monto;
+        } else if (metodo === 'YAPE' || metodo === 'PLIN') {
+          yapePlin += monto;
+        } else {
+          transferencia += monto;
+        }
 
         addToMap(c.fecha_pago || new Date().toISOString(), 'ingreso', monto);
       }

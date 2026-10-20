@@ -132,6 +132,7 @@ export function normalizarMetodoPago(
       return normalizarMetodoPago(match[1]);
     }
     const up = notas.toUpperCase();
+    if (up.includes('PAGO CRUZADO') || up.includes('CRUZADO') || up.includes('MIXTO')) return 'MIXTO';
     if (up.includes('YAPE')) return 'YAPE';
     if (up.includes('PLIN')) return 'PLIN';
     if (up.includes('TRANSFERENCIA') || up.includes('BCP') || up.includes('BBVA')) return 'TRANSFERENCIA';

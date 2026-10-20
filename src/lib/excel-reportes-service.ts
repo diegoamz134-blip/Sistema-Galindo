@@ -4,6 +4,7 @@ import { format, subDays, startOfMonth, startOfYear } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { matchSede } from '@/lib/academia-service';
 import { RangoFecha, SedeFiltro } from '@/lib/reportes-service';
+import { obtenerMatriculasParaTurno, obtenerCuotasParaTurno, parseDesglosePagoCruzado } from '@/lib/pos-service';
 
 // -----------------------------------------------------------------------------
 // 1. EXPORTAR REPORTE FINANCIERO COMPLETO (Panel de Reportes)
@@ -122,9 +123,23 @@ export async function exportarReporteFinancieroExcel({
     totalIngresos += monto;
 
     const metodo = (p.metodo_pago || 'EFECTIVO').toUpperCase();
-    if (metodo.includes('EFECTIVO') || metodo.includes('MIXTO')) efectivo += monto;
-    else if (metodo.includes('YAPE') || metodo.includes('PLIN')) yapePlin += monto;
-    else transferencia += monto;
+    let textoMetodo = p.metodo_pago || 'EFECTIVO';
+    if (metodo === 'MIXTO' || metodo.includes('MIXTO') || metodo.includes('CRUZADO')) {
+      const desglose = parseDesglosePagoCruzado(p.notas, monto);
+      efectivo += desglose.efectivo;
+      if (desglose.canalDigital === 'TARJETA' || desglose.canalDigital === 'TRANSFERENCIA') {
+        transferencia += desglose.digital;
+      } else {
+        yapePlin += desglose.digital;
+      }
+      textoMetodo = `PAGO CRUZADO (S/ ${desglose.efectivo.toFixed(2)} Efectivo + S/ ${desglose.digital.toFixed(2)} ${desglose.canalDigital})`;
+    } else if (metodo.includes('EFECTIVO')) {
+      efectivo += monto;
+    } else if (metodo.includes('YAPE') || metodo.includes('PLIN')) {
+      yapePlin += monto;
+    } else {
+      transferencia += monto;
+    }
 
     const esPos = p.codigo_pedido?.startsWith('POS-');
     const itemsNombres = (p.pedido_items || []).map((it: any) => `${it.cantidad}x ${it.nombre_producto}`).join('; ');
@@ -158,7 +173,7 @@ export async function exportarReporteFinancieroExcel({
       'TELEFONO_DNI': p.cliente_telefono || p.cliente_dni || '-',
       'TIPO': tieneMatricula ? 'Academia' : 'Tienda / Barbería',
       'PRODUCTOS_SERVICIOS': itemsNombres || 'Venta POS',
-      'METODO_PAGO': p.metodo_pago || 'EFECTIVO',
+      'METODO_PAGO': textoMetodo,
       'SEDE': (p.sede_id || sedeFiltro).toUpperCase(),
       'TOTAL_S/': monto,
     });
@@ -171,9 +186,23 @@ export async function exportarReporteFinancieroExcel({
     academiaIngresos += monto;
 
     const metodo = (c.metodo_pago || 'EFECTIVO').toUpperCase();
-    if (metodo.includes('EFECTIVO') || metodo.includes('MIXTO')) efectivo += monto;
-    else if (metodo.includes('YAPE') || metodo.includes('PLIN')) yapePlin += monto;
-    else transferencia += monto;
+    let textoMetodoCuota = c.metodo_pago || 'EFECTIVO';
+    if (metodo === 'MIXTO' || metodo.includes('MIXTO') || metodo.includes('CRUZADO')) {
+      const desglose = parseDesglosePagoCruzado(c.notas, monto);
+      efectivo += desglose.efectivo;
+      if (desglose.canalDigital === 'TARJETA' || desglose.canalDigital === 'TRANSFERENCIA') {
+        transferencia += desglose.digital;
+      } else {
+        yapePlin += desglose.digital;
+      }
+      textoMetodoCuota = `PAGO CRUZADO (S/ ${desglose.efectivo.toFixed(2)} Efectivo + S/ ${desglose.digital.toFixed(2)} ${desglose.canalDigital})`;
+    } else if (metodo.includes('EFECTIVO')) {
+      efectivo += monto;
+    } else if (metodo.includes('YAPE') || metodo.includes('PLIN')) {
+      yapePlin += monto;
+    } else {
+      transferencia += monto;
+    }
 
     const fechaFmt = c.fecha_pago
       ? format(new Date(c.fecha_pago), 'dd/MM/yyyy HH:mm', { locale: es })
@@ -189,7 +218,7 @@ export async function exportarReporteFinancieroExcel({
       'TELEFONO_DNI': '-',
       'TIPO': 'Cuota Academia',
       'PRODUCTOS_SERVICIOS': 'Mensualidad / Curso Barbería',
-      'METODO_PAGO': c.metodo_pago || 'EFECTIVO',
+      'METODO_PAGO': textoMetodoCuota,
       'SEDE': (c.matriculas?.sede || sedeFiltro).toUpperCase(),
       'TOTAL_S/': monto,
     });
@@ -390,6 +419,13 @@ export async function exportarCierreCajaExcel({
     .lte('creado_en', fechaFinISO)
     .order('creado_en', { ascending: false });
 
+  // Traer matrículas y cuotas usando los mismos servicios unificados y seguros del POS
+  const fechaStr = fechaFiltro && fechaFiltro !== 'HOY' ? fechaFiltro : format(new Date(), 'yyyy-MM-dd');
+  const [matriculasTurno, cuotasTurno] = await Promise.all([
+    obtenerMatriculasParaTurno(sedeId, fechaStr),
+    obtenerCuotasParaTurno(sedeId, fechaInicioISO, fechaFinISO),
+  ]);
+
   // Filtrar pedidos que pertenezcan estrictamente a la sede
   const pedidos = (pedidosRaw || []).filter((p: any) => {
     const s = p.sede_id || p.ciudad || p.notas || '';
@@ -404,16 +440,36 @@ export async function exportarCierreCajaExcel({
   let totalTransferencia = 0;
   let totalIngresos = 0;
   let totalEgresos = 0;
+  let totalCobradoPagosCruzados = 0;
 
   const filasVentas = pedidos.map((p: any) => {
     const monto = Number(p.total || 0);
     totalIngresos += monto;
 
     const metodo = (p.metodo_pago || 'EFECTIVO').toUpperCase();
-    if (metodo.includes('EFECTIVO')) totalEfectivo += monto;
-    else if (metodo.includes('YAPE') || metodo.includes('PLIN')) totalYapePlin += monto;
-    else if (metodo.includes('TARJETA')) totalTarjeta += monto;
-    else totalTransferencia += monto;
+    let textoMetodoPago = p.metodo_pago || 'EFECTIVO';
+
+    if (metodo === 'EFECTIVO') {
+      totalEfectivo += monto;
+    } else if (metodo === 'MIXTO') {
+      const desglose = parseDesglosePagoCruzado(p.notas, monto);
+      totalEfectivo += desglose.efectivo;
+      if (desglose.canalDigital === 'YAPE' || desglose.canalDigital === 'PLIN') {
+        totalYapePlin += desglose.digital;
+      } else if (desglose.canalDigital === 'TARJETA') {
+        totalTarjeta += desglose.digital;
+      } else {
+        totalTransferencia += desglose.digital;
+      }
+      totalCobradoPagosCruzados += monto;
+      textoMetodoPago = `PAGO CRUZADO (S/ ${desglose.efectivo.toFixed(2)} Efectivo + S/ ${desglose.digital.toFixed(2)} ${desglose.canalDigital})`;
+    } else if (metodo.includes('YAPE') || metodo.includes('PLIN')) {
+      totalYapePlin += monto;
+    } else if (metodo.includes('TARJETA')) {
+      totalTarjeta += monto;
+    } else {
+      totalTransferencia += monto;
+    }
 
     const fechaFmt = p.creado_en
       ? format(new Date(p.creado_en), 'HH:mm:ss', { locale: es })
@@ -429,10 +485,111 @@ export async function exportarCierreCajaExcel({
       'CLIENTE': p.cliente_nombre || 'Cliente Mostrador',
       'DOCUMENTO_TELF': p.cliente_dni || p.cliente_telefono || '-',
       'DETALLE_PRODUCTOS': itemsDesc || 'Venta POS',
-      'METODO_PAGO': p.metodo_pago || 'EFECTIVO',
+      'TIPO': 'VENTA',
+      'METODO_PAGO': textoMetodoPago,
       'TOTAL_COBRADO_S/': monto,
     };
   });
+
+  // Filas de cuotas de academia (mensualidades) pagadas en el día
+  const filasCuotas = cuotasTurno
+    .filter((c) => c.estado !== 'CANCELADO' && c.total > 0)
+    .map((c) => {
+      const monto = Number(c.total || 0);
+      totalIngresos += monto;
+
+      const metodo = (c.metodo_pago || 'EFECTIVO').toUpperCase();
+      let textoMetodoPago = c.metodo_pago || 'EFECTIVO';
+
+      if (metodo === 'EFECTIVO') {
+        totalEfectivo += monto;
+      } else if (metodo === 'MIXTO') {
+        const desglose = c.desglosePago || parseDesglosePagoCruzado(c.notas, monto);
+        totalEfectivo += desglose.efectivo;
+        if (desglose.canalDigital === 'YAPE' || desglose.canalDigital === 'PLIN') {
+          totalYapePlin += desglose.digital;
+        } else if (desglose.canalDigital === 'TARJETA') {
+          totalTarjeta += desglose.digital;
+        } else {
+          totalTransferencia += desglose.digital;
+        }
+        totalCobradoPagosCruzados += monto;
+        textoMetodoPago = `PAGO CRUZADO (S/ ${desglose.efectivo.toFixed(2)} Efectivo + S/ ${desglose.digital.toFixed(2)} ${desglose.canalDigital})`;
+      } else if (metodo.includes('YAPE') || metodo.includes('PLIN')) {
+        totalYapePlin += monto;
+      } else if (metodo.includes('TARJETA')) {
+        totalTarjeta += monto;
+      } else {
+        totalTransferencia += monto;
+      }
+
+      const horaFmt = c.creado_en
+        ? format(new Date(c.creado_en), 'HH:mm:ss', { locale: es })
+        : 'N/A';
+
+      return {
+        'HORA': horaFmt,
+        'TICKET_NRO': c.codigo_pedido,
+        'CLIENTE': c.cliente_nombre || 'Alumno',
+        'DOCUMENTO_TELF': c.cliente_dni || c.cliente_telefono || '-',
+        'DETALLE_PRODUCTOS': c.items_resumen || 'Mensualidad / Cuota Academia',
+        'TIPO': 'MENSUALIDAD',
+        'METODO_PAGO': textoMetodoPago,
+        'TOTAL_COBRADO_S/': monto,
+      };
+    });
+
+  // Filas de matrículas del día
+  const filasMatriculas = matriculasTurno
+    .filter((m) => m.estado !== 'CANCELADO' && m.total > 0)
+    .map((m) => {
+      const monto = Number(m.total || 0);
+      totalIngresos += monto;
+
+      const metodo = (m.metodo_pago || 'EFECTIVO').toUpperCase();
+      let textoMetodoPago = m.metodo_pago || 'EFECTIVO';
+
+      if (metodo === 'EFECTIVO') {
+        totalEfectivo += monto;
+      } else if (metodo === 'MIXTO') {
+        const desglose = m.desglosePago || parseDesglosePagoCruzado(m.notas, monto);
+        totalEfectivo += desglose.efectivo;
+        if (desglose.canalDigital === 'YAPE' || desglose.canalDigital === 'PLIN') {
+          totalYapePlin += desglose.digital;
+        } else if (desglose.canalDigital === 'TARJETA') {
+          totalTarjeta += desglose.digital;
+        } else {
+          totalTransferencia += desglose.digital;
+        }
+        totalCobradoPagosCruzados += monto;
+        textoMetodoPago = `PAGO CRUZADO (S/ ${desglose.efectivo.toFixed(2)} Efectivo + S/ ${desglose.digital.toFixed(2)} ${desglose.canalDigital})`;
+      } else if (metodo.includes('YAPE') || metodo.includes('PLIN')) {
+        totalYapePlin += monto;
+      } else if (metodo.includes('TARJETA')) {
+        totalTarjeta += monto;
+      } else {
+        totalTransferencia += monto;
+      }
+
+      const horaFmt = m.creado_en
+        ? format(new Date(m.creado_en), 'HH:mm:ss', { locale: es })
+        : 'N/A';
+
+      return {
+        'HORA': horaFmt,
+        'TICKET_NRO': m.codigo_pedido,
+        'CLIENTE': m.cliente_nombre || 'Alumno',
+        'DOCUMENTO_TELF': m.cliente_dni || m.cliente_telefono || '-',
+        'DETALLE_PRODUCTOS': m.items_resumen || 'Matrícula Academia',
+        'TIPO': 'MATRICULA',
+        'METODO_PAGO': textoMetodoPago,
+        'TOTAL_COBRADO_S/': monto,
+      };
+    });
+
+  // Combinar todas las filas de ingresos y ordenar por hora
+  const todasFilasIngresos = [...filasVentas, ...filasCuotas, ...filasMatriculas]
+    .sort((a, b) => String(a['HORA']).localeCompare(String(b['HORA'])));
 
   const filasEgresos = gastos.map((g: any) => {
     const monto = Number(g.monto || 0);
@@ -469,24 +626,33 @@ export async function exportarCierreCajaExcel({
     { CONCEPTO: 'Transferencias Bancarias (S/)', MONTO: totalTransferencia },
     { CONCEPTO: 'TOTAL INGRESOS DEL DÍA (S/)', MONTO: totalIngresos },
     { CONCEPTO: '', MONTO: '' },
+    { CONCEPTO: '=== CONTROL DE PAGOS CRUZADOS (MIXTOS) ===', MONTO: '' },
+    { CONCEPTO: 'Total Ventas con Pago Cruzado (S/)', MONTO: totalCobradoPagosCruzados },
+    { CONCEPTO: 'Nota: El efectivo y digital de pagos cruzados ya están sumados en sus medios arriba.', MONTO: '' },
+    { CONCEPTO: '', MONTO: '' },
+    { CONCEPTO: '=== DESGLOSE POR TIPO DE INGRESO ===', MONTO: '' },
+    { CONCEPTO: 'Ventas POS de Productos / Barbería', MONTO: filasVentas.reduce((s: number, r: any) => s + Number(r['TOTAL_COBRADO_S/'] || 0), 0) },
+    { CONCEPTO: 'Mensualidades / Cuotas Academia', MONTO: filasCuotas.reduce((s: number, r: any) => s + Number(r['TOTAL_COBRADO_S/'] || 0), 0) },
+    { CONCEPTO: 'Matrículas Academia', MONTO: filasMatriculas.reduce((s: number, r: any) => s + Number(r['TOTAL_COBRADO_S/'] || 0), 0) },
+    { CONCEPTO: '', MONTO: '' },
     { CONCEPTO: '=== EGRESOS Y GASTOS DEL TURNO ===', MONTO: '' },
     { CONCEPTO: 'Total Salidas de Caja Chica (S/)', MONTO: totalEgresos },
     { CONCEPTO: '', MONTO: '' },
     { CONCEPTO: '=== CUADRE FINAL DE CAJÓN ===', MONTO: '' },
     { CONCEPTO: 'EFECTIVO NETO ESPERADO EN CAJÓN (S/)', MONTO: saldoNetoEfectivo },
     { CONCEPTO: 'TOTAL NETO DEL DÍA (S/)', MONTO: totalNetoGeneral },
-    { CONCEPTO: 'Cantidad de Tickets Emitidos', MONTO: filasVentas.length },
+    { CONCEPTO: 'Cantidad de Tickets / Cobros Emitidos', MONTO: todasFilasIngresos.length },
   ];
 
   const wsArqueo = XLSX.utils.json_to_sheet(filasArqueo);
   wsArqueo['!cols'] = [{ wch: 44 }, { wch: 28 }];
 
   // ---------------------------------------------------------------------------
-  // HOJA 2: VENTAS DEL TURNO
+  // HOJA 2: VENTAS DEL TURNO (incluye POS + Mensualidades + Matrículas)
   // ---------------------------------------------------------------------------
   const wsVentas = XLSX.utils.json_to_sheet(
-    filasVentas.length > 0
-      ? filasVentas
+    todasFilasIngresos.length > 0
+      ? todasFilasIngresos
       : [{ 'INFO': 'No se registraron ventas en este turno' }]
   );
   wsVentas['!cols'] = [
@@ -495,6 +661,7 @@ export async function exportarCierreCajaExcel({
     { wch: 26 }, // CLIENTE
     { wch: 16 }, // DOCUMENTO_TELF
     { wch: 38 }, // DETALLE_PRODUCTOS
+    { wch: 16 }, // TIPO
     { wch: 16 }, // METODO_PAGO
     { wch: 18 }, // TOTAL_COBRADO_S/
   ];

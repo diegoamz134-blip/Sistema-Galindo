@@ -36,6 +36,12 @@ export interface VentaPOSData {
   fecha?: string;
 }
 
+export interface DesglosePagoCruzado {
+  efectivo: number;
+  digital: number;
+  canalDigital: 'YAPE' | 'PLIN' | 'TARJETA' | 'TRANSFERENCIA';
+}
+
 export interface VentaRegistradaPOS {
   id: string;
   codigo_pedido: string;
@@ -49,6 +55,8 @@ export interface VentaRegistradaPOS {
   creado_en: string;
   items_resumen?: string;
   items_count: number;
+  notas?: string;
+  desglosePago?: DesglosePagoCruzado;
   /** Distingue el origen del ingreso para mostrar en Ventas Turno */
   tipo_transaccion?: 'VENTA_POS' | 'MATRICULA' | 'CUOTA';
 }
@@ -337,6 +345,47 @@ export function getRangoFechaPeru(fechaStr: string) {
   };
 }
 
+/**
+ * Parsea el desglose real de un Pago Cruzado guardado en notas
+ * Ejemplo: "Pago Cruzado: S/ 10.00 Efectivo + S/ 15.00 por YAPE."
+ */
+export function parseDesglosePagoCruzado(
+  notas?: string | null,
+  total: number = 0
+): DesglosePagoCruzado {
+  if (!notas) {
+    return { efectivo: total / 2, digital: total / 2, canalDigital: 'YAPE' };
+  }
+
+  // 1. Extraer Efectivo
+  const mEfec = notas.match(/S\/\.?\s*([\d,.]+)\s*(?:Efectivo|efectivo|en caja)/i);
+  // 2. Extraer Digital
+  const mDig =
+    notas.match(/\+\s*S\/\.?\s*([\d,.]+)\s*(?:por|vía|via)?\s*([A-Za-z]+)?/i) ||
+    notas.match(/S\/\.?\s*([\d,.]+)\s*(?:por|vía|via)\s*([A-Za-z]+)/i);
+
+  let efectivo = mEfec ? parseFloat(mEfec[1].replace(',', '')) : 0;
+  let digital = mDig ? parseFloat(mDig[1].replace(',', '')) : 0;
+
+  // Canal digital
+  let canalDigital: 'YAPE' | 'PLIN' | 'TARJETA' | 'TRANSFERENCIA' = 'YAPE';
+  if (/plin/i.test(notas)) canalDigital = 'PLIN';
+  else if (/tarjeta/i.test(notas)) canalDigital = 'TARJETA';
+  else if (/transferencia/i.test(notas)) canalDigital = 'TRANSFERENCIA';
+  else if (/yape/i.test(notas)) canalDigital = 'YAPE';
+
+  if (efectivo > 0 && digital === 0 && total > efectivo) {
+    digital = total - efectivo;
+  } else if (digital > 0 && efectivo === 0 && total > digital) {
+    efectivo = total - digital;
+  } else if (efectivo === 0 && digital === 0) {
+    efectivo = total / 2;
+    digital = total / 2;
+  }
+
+  return { efectivo, digital, canalDigital };
+}
+
 export interface FiltrosVentasPOS {
   sedeId?: 'ica' | 'huancayo';
   fecha?: string; // 'YYYY-MM-DD' o '' para todas
@@ -352,6 +401,8 @@ export interface ResultadoVentasPOSPaginado {
   totalPaginas: number;
   paginaActual: number;
   totalVendido: number;
+  totalEfectivo: number;
+  totalDigital: number;
   totalTicketsValidos: number;
   totalAnulados: number;
 }
@@ -361,7 +412,7 @@ export interface ResultadoVentasPOSPaginado {
 // ---------------------------------------------------------------------------
 
 /** Obtiene matrículas del día o recientes como registros unificados para el arqueo */
-async function obtenerMatriculasParaTurno(
+export async function obtenerMatriculasParaTurno(
   sedeId: string | undefined,
   fechaStr?: string
 ): Promise<VentaRegistradaPOS[]> {
@@ -369,11 +420,9 @@ async function obtenerMatriculasParaTurno(
     let query = supabase
       .from('matriculas')
       .select('id, codigo_matricula, alumno_id, sede, fecha_matricula, monto_matricula_pagado, estado, curso_nombre, notas, metodo_pago, creado_en')
-      .order('fecha_matricula', { ascending: false });
+      .order('creado_en', { ascending: false });
 
-    if (fechaStr) {
-      query = query.eq('fecha_matricula', fechaStr);
-    } else {
+    if (!fechaStr) {
       query = query.limit(50);
     }
 
@@ -381,9 +430,23 @@ async function obtenerMatriculasParaTurno(
 
     if (!matsData || matsData.length === 0) return [];
 
+    const getFechaPeruFromIso = (iso?: string | null) => {
+      if (!iso) return '';
+      const dt = new Date(iso);
+      if (isNaN(dt.getTime())) return '';
+      return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Lima' }).format(dt);
+    };
+
     let filtrados = matsData;
+    if (fechaStr) {
+      filtrados = filtrados.filter((m: any) => {
+        const fechaRealPeru = m.creado_en ? getFechaPeruFromIso(m.creado_en) : m.fecha_matricula;
+        return fechaRealPeru === fechaStr;
+      });
+    }
+
     if (sedeId) {
-      filtrados = matsData.filter((m: any) => matchSede(m.sede, sedeId));
+      filtrados = filtrados.filter((m: any) => matchSede(m.sede, sedeId));
     }
     if (filtrados.length === 0) return [];
 
@@ -400,19 +463,24 @@ async function obtenerMatriculasParaTurno(
     return filtrados.map((m: any) => {
       const a = alumnosMap[m.alumno_id] || {};
       const metodoPago = normalizarMetodoPago(m.metodo_pago, m.notas) as MetodoPago;
+      const isMixto = String(metodoPago).toUpperCase() === 'MIXTO';
+      const monto = Number(m.monto_matricula_pagado || 0);
+      const desglose = isMixto ? parseDesglosePagoCruzado(m.notas, monto) : undefined;
       return {
         id: m.id,
         codigo_pedido: m.codigo_matricula || `MAT-${String(m.id).slice(0, 6)}`,
         cliente_nombre: `${a.nombres || ''} ${a.apellidos || ''}`.trim() || 'Alumno',
         cliente_telefono: a.celular,
         cliente_dni: a.dni,
-        total: Number(m.monto_matricula_pagado || 0),
+        total: monto,
         metodo_pago: metodoPago,
         metodo_entrega: 'ACADEMIA',
         estado: m.estado === 'RETIRADO' ? 'CANCELADO' : 'ENTREGADO',
         creado_en: m.creado_en || `${m.fecha_matricula}T17:00:00.000Z`,
         items_resumen: `Matrícula: ${m.curso_nombre || 'Curso'}`,
         items_count: 1,
+        notas: m.notas,
+        desglosePago: desglose,
         tipo_transaccion: 'MATRICULA' as const,
       };
     });
@@ -423,7 +491,7 @@ async function obtenerMatriculasParaTurno(
 }
 
 /** Obtiene pagos de cuotas del día o recientes como registros unificados para el arqueo */
-async function obtenerCuotasParaTurno(
+export async function obtenerCuotasParaTurno(
   sedeId: string | undefined,
   inicioISO?: string,
   finISO?: string
@@ -483,19 +551,24 @@ async function obtenerCuotasParaTurno(
       const mat = matsMap[c.matricula_id] || {};
       const a = alumnosMap[mat.alumno_id] || {};
       const metodoPago = normalizarMetodoPago(c.metodo_pago, c.notas) as MetodoPago;
+      const isMixto = String(metodoPago).toUpperCase() === 'MIXTO';
+      const monto = Number(c.monto || 0);
+      const desglose = isMixto ? parseDesglosePagoCruzado(c.notas, monto) : undefined;
       return {
         id: c.id,
         codigo_pedido: `${mat.codigo_matricula || 'MAT'}-C${c.numero_cuota}`,
         cliente_nombre: `${a.nombres || ''} ${a.apellidos || ''}`.trim() || 'Alumno',
         cliente_telefono: a.celular,
         cliente_dni: a.dni,
-        total: Number(c.monto || 0),
+        total: monto,
         metodo_pago: metodoPago,
         metodo_entrega: 'ACADEMIA',
         estado: 'ENTREGADO',
         creado_en: c.fecha_pago,
         items_resumen: `Cuota #${c.numero_cuota} — ${mat.curso_nombre || 'Curso'}`,
         items_count: 1,
+        notas: c.notas,
+        desglosePago: desglose,
         tipo_transaccion: 'CUOTA' as const,
       };
     });
@@ -563,11 +636,18 @@ export async function getVentasPOSPaginadas({
     }
 
     // Mapear pedidos y filtrar por sede
-    let pedidosMapped: VentaRegistradaPOS[] = (pedidosResult.data || []).map((d: any) => ({
-      ...d,
-      items_count: 1,
-      tipo_transaccion: 'VENTA_POS' as const,
-    }));
+    let pedidosMapped: VentaRegistradaPOS[] = (pedidosResult.data || []).map((d: any) => {
+      const isMixto = String(d.metodo_pago || '').toUpperCase() === 'MIXTO';
+      const monto = Number(d.total || 0);
+      const desglose = isMixto ? parseDesglosePagoCruzado(d.notas, monto) : undefined;
+      return {
+        ...d,
+        items_count: 1,
+        tipo_transaccion: 'VENTA_POS' as const,
+        notas: d.notas,
+        desglosePago: desglose,
+      };
+    });
     if (sedeId) {
       pedidosMapped = pedidosMapped.filter((d) => {
         const sc = (d as any).sede_id || (d as any).ciudad || (d as any).notas || '';
@@ -598,6 +678,23 @@ export async function getVentasPOSPaginadas({
     // ── KPIs del período ─────────────────────────────────────────────────
     const validas = filtradas.filter((v) => v.estado !== 'CANCELADO');
     const totalVendido = validas.reduce((acc, v) => acc + Number(v.total || 0), 0);
+
+    let totalEfectivo = 0;
+    let totalDigital = 0;
+    validas.forEach((v) => {
+      const monto = Number(v.total || 0);
+      const met = String(v.metodo_pago || '').toUpperCase();
+      if (met === 'EFECTIVO') {
+        totalEfectivo += monto;
+      } else if (met === 'MIXTO') {
+        const desglose = v.desglosePago || parseDesglosePagoCruzado(v.notas, monto);
+        totalEfectivo += desglose.efectivo;
+        totalDigital += desglose.digital;
+      } else {
+        totalDigital += monto;
+      }
+    });
+
     const totalTicketsValidos = validas.length;
     const totalAnulados = filtradas.filter((v) => v.estado === 'CANCELADO').length;
     const totalRegistros = filtradas.length;
@@ -613,6 +710,8 @@ export async function getVentasPOSPaginadas({
       totalPaginas,
       paginaActual: pagina,
       totalVendido,
+      totalEfectivo,
+      totalDigital,
       totalTicketsValidos,
       totalAnulados,
     };
@@ -624,6 +723,8 @@ export async function getVentasPOSPaginadas({
       totalPaginas: 1,
       paginaActual: 1,
       totalVendido: 0,
+      totalEfectivo: 0,
+      totalDigital: 0,
       totalTicketsValidos: 0,
       totalAnulados: 0,
     };

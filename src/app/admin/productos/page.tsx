@@ -243,13 +243,33 @@ export default function AdminProductosPage() {
     };
   }, [pagina, debouncedBusqueda, categoriaFiltro, sedeActiva]);
 
-  // Generador 100% automático de SKU correlativo único
-  const generarSkuAutomatico = useCallback(() => {
-    const nextNum = String((totalProductos || productos.length) + 1).padStart(4, '0');
-    return `GAL-${nextNum}`;
-  }, [totalProductos, productos]);
+  // Generador 100% seguro de SKU: busca el máximo número GAL-XXXX ya existente y suma 1
+  const generarSkuAutomatico = useCallback(async (): Promise<string> => {
+    try {
+      // Traer todos los SKUs que empiecen con GAL- para encontrar el mayor
+      const { data } = await supabase
+        .from('productos')
+        .select('sku')
+        .like('sku', 'GAL-%');
 
-  const abrirModalNuevo = () => {
+      let maxNum = 0;
+      (data || []).forEach((p: { sku: string }) => {
+        const match = p.sku.match(/^GAL-(\d+)$/);
+        if (match) {
+          const num = parseInt(match[1], 10);
+          if (num > maxNum) maxNum = num;
+        }
+      });
+
+      const nextNum = String(maxNum + 1).padStart(4, '0');
+      return `GAL-${nextNum}`;
+    } catch {
+      // Fallback seguro con timestamp para evitar colisiones
+      return `GAL-${Date.now().toString().slice(-6)}`;
+    }
+  }, []);
+
+  const abrirModalNuevo = async () => {
     setEditingProducto(null);
     setFormError(null);
     setNombre('');
@@ -262,7 +282,7 @@ export default function AdminProductosPage() {
     setDescripcion('');
     setDestacado(false);
     setEnOferta(false);
-    setSku(generarSkuAutomatico());
+    setSku(await generarSkuAutomatico());
     setShowModalNuevo(true);
   };
 
@@ -360,7 +380,7 @@ export default function AdminProductosPage() {
     setFormError(null);
     setIsSaving(true);
 
-    const finalSku = sku.trim() || generarSkuAutomatico();
+    const finalSku = sku.trim() || (await generarSkuAutomatico());
     const parsedStockLocal = Math.max(0, parseInt(stockLocal, 10) || 0);
 
     const stockIcaAUsar = sedeActiva === 'ica' ? parsedStockLocal : (editingProducto?.stock_ica || 0);
@@ -873,7 +893,10 @@ export default function AdminProductosPage() {
                     </label>
                     <button
                       type="button"
-                      onClick={() => setSku(generarSkuAutomatico())}
+                      onClick={async () => {
+                        const nuevoSku = await generarSkuAutomatico();
+                        setSku(nuevoSku);
+                      }}
                       className="text-[10px] text-zinc-500 hover:text-black font-mono underline cursor-pointer"
                       title="Generar nuevo código correlativo"
                     >

@@ -4,16 +4,18 @@ import React, { useState, useEffect } from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 import { CreditCard } from 'lucide-react';
 import { formatCurrency } from '@/lib/utils';
-import { PaymentMethodItem, getPaymentMethodsBreakdown } from '@/lib/dashboard-service';
+import { PaymentMethodItem, getPaymentMethodsBreakdown, PeriodoMetodos } from '@/lib/dashboard-service';
 
 export function PaymentMethodsDonut({ sedeId }: { sedeId?: string }) {
+  const [periodo, setPeriodo] = useState<PeriodoMetodos>('hoy');
   const [data, setData] = useState<PaymentMethodItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     let isMounted = true;
     async function load() {
-      const res = await getPaymentMethodsBreakdown(sedeId);
+      setIsLoading(true);
+      const res = await getPaymentMethodsBreakdown(sedeId, periodo);
       if (isMounted) {
         setData(res);
         setIsLoading(false);
@@ -23,22 +25,67 @@ export function PaymentMethodsDonut({ sedeId }: { sedeId?: string }) {
     return () => {
       isMounted = false;
     };
-  }, [sedeId]);
+  }, [sedeId, periodo]);
 
   const total = data.reduce((acc, curr) => acc + curr.monto, 0);
   const chartData = total > 0 ? data : [{ name: 'Sin cobros', monto: 1, porcentaje: 0, color: '#e4e4e7' }];
 
   return (
     <div className="p-6 rounded-2xl bg-white border border-zinc-200 shadow-sm space-y-5">
-      {/* Header */}
-      <div className="flex items-center justify-between">
+      {/* Header con Filtros de Periodo */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
         <div className="flex items-center gap-2 text-xs font-mono uppercase tracking-wider text-zinc-500">
           <CreditCard className="w-3.5 h-3.5 text-cyan-600" />
           <span>Canales de Cobro</span>
         </div>
-        <span className="text-[10px] font-mono text-zinc-500 uppercase tracking-wider">
-          Hoy
-        </span>
+
+        {/* Selector de Periodo */}
+        <div className="flex items-center gap-1 p-0.5 rounded-lg bg-zinc-100 border border-zinc-200/80 text-[11px] font-medium self-start sm:self-auto">
+          <button
+            type="button"
+            onClick={() => setPeriodo('hoy')}
+            className={`px-2 py-0.5 rounded-md transition-all cursor-pointer ${
+              periodo === 'hoy'
+                ? 'bg-white text-zinc-950 font-semibold shadow-xs'
+                : 'text-zinc-500 hover:text-zinc-950'
+            }`}
+          >
+            Hoy
+          </button>
+          <button
+            type="button"
+            onClick={() => setPeriodo('7d')}
+            className={`px-2 py-0.5 rounded-md transition-all cursor-pointer ${
+              periodo === '7d'
+                ? 'bg-white text-zinc-950 font-semibold shadow-xs'
+                : 'text-zinc-500 hover:text-zinc-950'
+            }`}
+          >
+            7 Días
+          </button>
+          <button
+            type="button"
+            onClick={() => setPeriodo('30d')}
+            className={`px-2 py-0.5 rounded-md transition-all cursor-pointer ${
+              periodo === '30d'
+                ? 'bg-white text-zinc-950 font-semibold shadow-xs'
+                : 'text-zinc-500 hover:text-zinc-950'
+            }`}
+          >
+            Mes
+          </button>
+          <button
+            type="button"
+            onClick={() => setPeriodo('todo')}
+            className={`px-2 py-0.5 rounded-md transition-all cursor-pointer ${
+              periodo === 'todo'
+                ? 'bg-white text-zinc-950 font-semibold shadow-xs'
+                : 'text-zinc-500 hover:text-zinc-950'
+            }`}
+          >
+            Todo
+          </button>
+        </div>
       </div>
 
       {/* Gráfico Donut y Métricas */}

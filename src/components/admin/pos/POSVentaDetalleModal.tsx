@@ -28,7 +28,7 @@ import {
   Hash,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
-import { VentaRegistradaPOS } from '@/lib/pos-service';
+import { VentaRegistradaPOS, parseDesglosePagoCruzado } from '@/lib/pos-service';
 import { formatCurrency } from '@/lib/utils';
 import { METODOS_PAGO_LABELS } from '@/lib/constants';
 
@@ -412,6 +412,41 @@ export function POSVentaDetalleModal({
                 </p>
               </div>
             )}
+
+            {/* DESGLOSE DESTACADO DE PAGO CRUZADO (SEPARACIÓN EXACTA EFECTIVO / DIGITAL) */}
+            {venta.metodo_pago === 'MIXTO' && (() => {
+              const desglose = venta.desglosePago || parseDesglosePagoCruzado(datosPedido?.notas || venta.notas, totalFinal);
+              return (
+                <div className="p-4 bg-indigo-50/80 rounded-2xl border border-indigo-200 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="font-black text-indigo-950 flex items-center gap-1.5 text-xs">
+                      <span>Desglose de Pago Cruzado</span>
+                    </span>
+                    <span className="text-[10px] font-mono font-bold bg-indigo-100 text-indigo-800 px-2 py-0.5 rounded-full border border-indigo-200">
+                      Separado en Caja
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2.5 pt-1">
+                    <div className="p-3 bg-white rounded-xl border border-indigo-100/90 shadow-2xs">
+                      <span className="text-[10px] uppercase font-bold text-zinc-500 block font-mono">
+                        💵 Efectivo (Gaveta)
+                      </span>
+                      <span className="font-mono font-black text-base text-zinc-950 mt-0.5 block">
+                        {formatCurrency(desglose.efectivo)}
+                      </span>
+                    </div>
+                    <div className="p-3 bg-white rounded-xl border border-indigo-100/90 shadow-2xs">
+                      <span className="text-[10px] uppercase font-bold text-zinc-500 block font-mono">
+                        📱 {desglose.canalDigital} (Digital)
+                      </span>
+                      <span className="font-mono font-black text-base text-emerald-600 mt-0.5 block">
+                        {formatCurrency(desglose.digital)}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* CAJA DE TOTALES */}
             <div className="p-4 bg-zinc-900 text-white rounded-2xl space-y-2 shadow-inner">

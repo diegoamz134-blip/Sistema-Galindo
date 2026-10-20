@@ -91,6 +91,8 @@ export function POSSalesHistoryModal({
   const [totalRegistros, setTotalRegistros] = useState(0);
   const [totalPaginas, setTotalPaginas] = useState(1);
   const [totalVendido, setTotalVendido] = useState(0);
+  const [totalEfectivo, setTotalEfectivo] = useState(0);
+  const [totalDigital, setTotalDigital] = useState(0);
   const [totalTicketsValidos, setTotalTicketsValidos] = useState(0);
   const [totalAnulados, setTotalAnulados] = useState(0);
 
@@ -118,6 +120,8 @@ export function POSSalesHistoryModal({
       setTotalRegistros(res.totalRegistros);
       setTotalPaginas(res.totalPaginas);
       setTotalVendido(res.totalVendido);
+      setTotalEfectivo(res.totalEfectivo || 0);
+      setTotalDigital(res.totalDigital || 0);
       setTotalTicketsValidos(res.totalTicketsValidos);
       setTotalAnulados(res.totalAnulados);
     } catch (err) {
@@ -251,6 +255,14 @@ export function POSSalesHistoryModal({
             <span className="text-xl font-black font-mono text-zinc-950">
               {formatCurrency(totalVendido)}
             </span>
+            <div className="mt-1 flex items-center gap-1.5 flex-wrap text-[10px] font-mono font-bold">
+              <span className="text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200" title="Efectivo físico en gaveta">
+                💵 Efec: {formatCurrency(totalEfectivo)}
+              </span>
+              <span className="text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200" title="Total en medios digitales">
+                📱 Dig: {formatCurrency(totalDigital)}
+              </span>
+            </div>
           </div>
 
           <div className="p-3 rounded-2xl bg-zinc-50 border border-zinc-200">
@@ -493,6 +505,13 @@ export function POSSalesHistoryModal({
                       <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${metaLabel.color}`}>
                         {metaLabel.label}
                       </span>
+
+                      {/* Desglose exacto de Pago Cruzado / Mixto */}
+                      {v.metodo_pago === 'MIXTO' && v.desglosePago && (
+                        <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-lg bg-indigo-50 text-indigo-900 border border-indigo-200 font-mono">
+                          💵 S/ {v.desglosePago.efectivo.toFixed(2)} Efec + 📱 S/ {v.desglosePago.digital.toFixed(2)} {v.desglosePago.canalDigital}
+                        </span>
+                      )}
 
                       {/* Estado del pedido */}
                       {esAnulado ? (

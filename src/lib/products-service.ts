@@ -287,9 +287,21 @@ export async function createProduct(
 
     let finalSku = input.sku ? input.sku.trim().toUpperCase() : '';
     if (!finalSku) {
-      const { count } = await supabase.from('productos').select('*', { count: 'exact', head: true });
-      const nextNum = String((count || 0) + 1).padStart(4, '0');
-      finalSku = `GAL-${nextNum}`;
+      // Buscar el número máximo GAL-XXXX ya registrado para evitar colisiones
+      const { data: skusData } = await supabase
+        .from('productos')
+        .select('sku')
+        .like('sku', 'GAL-%');
+
+      let maxNum = 0;
+      (skusData || []).forEach((p: { sku: string }) => {
+        const match = p.sku.match(/^GAL-(\d+)$/);
+        if (match) {
+          const num = parseInt(match[1], 10);
+          if (num > maxNum) maxNum = num;
+        }
+      });
+      finalSku = `GAL-${String(maxNum + 1).padStart(4, '0')}`;
     }
 
     const stockIca = typeof input.stock_ica === 'number' ? input.stock_ica : (Number(input.stock) || 0);

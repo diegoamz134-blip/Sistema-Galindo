@@ -153,7 +153,12 @@ export default function POSPage() {
           if (item.producto.id === productoId) {
             const nueva = item.cantidad + delta;
             if (nueva <= 0) return null;
-            if (nueva > item.producto.stock) return item; // No exceder stock
+            // Validar contra el stock de la sede activa (no el stock general)
+            const stockEnSede =
+              sedeId === 'huancayo'
+                ? (item.producto.stock_huancayo ?? 0)
+                : (item.producto.stock_ica ?? item.producto.stock ?? 0);
+            if (nueva > stockEnSede) return item; // No exceder stock de la sede
             return {
               ...item,
               cantidad: nueva,

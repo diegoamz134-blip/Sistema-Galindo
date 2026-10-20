@@ -1,6 +1,7 @@
 import { supabase } from '@/lib/supabase';
 import { MovimientoCaja, Matricula } from '@/types/database';
 import { matchSede, getMatriculasConDetalle } from '@/lib/academia-service';
+import { parseDesglosePagoCruzado } from '@/lib/pos-service';
 
 export interface DashboardSummary {
   cobrosHoy: number;
@@ -36,6 +37,20 @@ export interface PaymentMethodItem {
   monto: number;
   porcentaje: number;
   color: string;
+}
+
+export type PeriodoMetodos = 'hoy' | '7d' | '30d' | 'todo';
+
+// Helper de zona horaria Perú (America/Lima UTC-5)
+export function getFechaPeru(d: Date = new Date()): string {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Lima' }).format(d);
+}
+
+export function getFechaPeruFromIso(iso?: string | null): string {
+  if (!iso) return '';
+  const dt = new Date(iso);
+  if (isNaN(dt.getTime())) return '';
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Lima' }).format(dt);
 }
 
 // -------------------------------------------------------------------------
@@ -112,28 +127,33 @@ export async function getDashboardSummary(sedeId?: string): Promise<DashboardSum
       (m: any) => m.estado !== 'RETIRADO' && m.estado !== 'EGRESADO'
     ).length;
 
-    // Calcular cobros de hoy (Ventas POS + Matrículas Pagadas Hoy + Cuotas Pagadas Hoy)
-    const hoyStr = new Date().toISOString().slice(0, 10);
+    // Calcular cobros de hoy con zona horaria de Perú (UTC-5)
+    const hoyStr = getFechaPeru();
     let cobrosHoy = 0;
     let efectivoCaja = 0;
     let digitalCaja = 0;
 
     // 1. Ventas POS / Tienda Web de hoy
     ventasConsolidadas.forEach((v) => {
-      const fechaVenta = v.creado_en ? v.creado_en.slice(0, 10) : hoyStr;
+      const fechaVenta = v.creado_en ? getFechaPeruFromIso(v.creado_en) : hoyStr;
       const monto = Number(v.total || 0);
 
       if (fechaVenta === hoyStr) {
         cobrosHoy += monto;
 
         const metodo = String(v.metodo_pago || '').toUpperCase();
-        if (metodo.includes('EFECTIVO')) {
+        if (metodo.includes('MIXTO')) {
+          const desglose = v.ventaCompleta?.detallesPago
+            ? {
+                efectivo: Number(v.ventaCompleta.detallesPago.efectivo || 0),
+                digital: Number(v.ventaCompleta.detallesPago.digital || 0),
+                canalDigital: v.ventaCompleta.detallesPago.canalDigital || 'YAPE',
+              }
+            : parseDesglosePagoCruzado(v.notas, monto);
+          efectivoCaja += desglose.efectivo;
+          digitalCaja += desglose.digital;
+        } else if (metodo.includes('EFECTIVO')) {
           efectivoCaja += monto;
-        } else if (metodo.includes('MIXTO')) {
-          const efecParte = v.ventaCompleta?.detallesPago?.efectivo ?? monto / 2;
-          const digParte = v.ventaCompleta?.detallesPago?.digital ?? monto / 2;
-          efectivoCaja += Number(efecParte);
-          digitalCaja += Number(digParte);
         } else {
           digitalCaja += monto;
         }
@@ -142,11 +162,20 @@ export async function getDashboardSummary(sedeId?: string): Promise<DashboardSum
 
     // 2. Matrículas pagadas hoy en la sede
     matriculasSede.forEach((m: any) => {
-      const fechaMat = (m.creado_en || m.fecha_matricula || '').slice(0, 10);
+      const fechaMat = getFechaPeruFromIso(m.creado_en || m.fecha_matricula);
       const monto = Number(m.monto_matricula_pagado || 0);
       if (fechaMat === hoyStr && monto > 0) {
         cobrosHoy += monto;
-        efectivoCaja += monto;
+        const metodo = String(m.metodo_pago || 'EFECTIVO').toUpperCase();
+        if (metodo.includes('MIXTO')) {
+          const desglose = parseDesglosePagoCruzado(m.notas, monto);
+          efectivoCaja += desglose.efectivo;
+          digitalCaja += desglose.digital;
+        } else if (metodo.includes('EFECTIVO')) {
+          efectivoCaja += monto;
+        } else {
+          digitalCaja += monto;
+        }
       }
     });
 
@@ -155,13 +184,20 @@ export async function getDashboardSummary(sedeId?: string): Promise<DashboardSum
       const sedeCuota = c.matriculas?.sede;
       if (sedeId && sedeId !== 'TODAS' && !matchSede(sedeCuota, sedeId)) return;
 
-      const fechaPago = (c.fecha_pago || '').slice(0, 10);
+      const fechaPago = getFechaPeruFromIso(c.fecha_pago);
       const monto = Number(c.monto || 0);
       if (fechaPago === hoyStr && monto > 0) {
         cobrosHoy += monto;
         const metodo = String(c.metodo_pago || '').toUpperCase();
-        if (metodo.includes('EFECTIVO')) efectivoCaja += monto;
-        else digitalCaja += monto;
+        if (metodo.includes('MIXTO')) {
+          const desglose = parseDesglosePagoCruzado(c.notas, monto);
+          efectivoCaja += desglose.efectivo;
+          digitalCaja += desglose.digital;
+        } else if (metodo.includes('EFECTIVO')) {
+          efectivoCaja += monto;
+        } else {
+          digitalCaja += monto;
+        }
       }
     });
 
@@ -174,7 +210,7 @@ export async function getDashboardSummary(sedeId?: string): Promise<DashboardSum
         if (!sedeCaja && g.concepto && !matchSede(g.concepto, sedeId)) return;
       }
 
-      const fechaEgreso = (g.fecha || g.creado_en || '').slice(0, 10);
+      const fechaEgreso = getFechaPeruFromIso(g.fecha || g.creado_en);
       if (fechaEgreso === hoyStr) {
         egresosHoy += Number(g.monto || 0);
       }
@@ -368,21 +404,49 @@ export async function getTopProductsRanking(sedeId?: string): Promise<TopProduct
 // -------------------------------------------------------------------------
 // 4. Obtener Distribución de Métodos de Pago
 // -------------------------------------------------------------------------
-export async function getPaymentMethodsBreakdown(sedeId?: string): Promise<PaymentMethodItem[]> {
+export async function getPaymentMethodsBreakdown(
+  sedeId?: string,
+  periodo: PeriodoMetodos = 'hoy'
+): Promise<PaymentMethodItem[]> {
   try {
     const ventas = await getConsolidatedSales(sedeId);
 
     // Consultar cuotas pagadas de la sede
     const { data: cuotas } = await supabase
       .from('cuotas_matricula')
-      .select('monto, metodo_pago, estado, matriculas(sede)')
+      .select('monto, metodo_pago, estado, fecha_pago, matriculas(sede)')
       .eq('estado', 'PAGADA');
+
+    // Consultar matrículas de la sede
+    const { data: matriculas } = await supabase
+      .from('matriculas')
+      .select('monto_matricula_pagado, metodo_pago, creado_en, fecha_matricula, sede');
+
+    const hoyPeru = getFechaPeru();
+
+    // Filtro de periodo basado en hora de Perú
+    const matchPeriodo = (isoDate?: string | null): boolean => {
+      if (!isoDate) return periodo === 'todo';
+      const fechaPeru = getFechaPeruFromIso(isoDate);
+      if (periodo === 'hoy') return fechaPeru === hoyPeru;
+      if (periodo === 'todo') return true;
+
+      const fechaObj = new Date(isoDate);
+      const diffMs = Date.now() - fechaObj.getTime();
+      const diffDias = diffMs / (1000 * 60 * 60 * 24);
+      if (periodo === '7d') return diffDias <= 7;
+      if (periodo === '30d') return diffDias <= 30;
+      return true;
+    };
 
     let totalYape = 0;
     let totalEfectivo = 0;
     let totalTransferencia = 0;
 
+    // 1. Ventas de tienda / POS
     ventas.forEach((v) => {
+      if (!matchPeriodo(v.creado_en)) return;
+
       const monto = Number(v.total || 0);
       const metodo = String(v.metodo_pago || '').toUpperCase();
 
@@ -391,22 +455,72 @@ export async function getPaymentMethodsBreakdown(sedeId?: string): Promise<Payme
       } else if (metodo === 'EFECTIVO') {
         totalEfectivo += monto;
       } else if (metodo === 'MIXTO') {
-        const efecParte = v.ventaCompleta?.detallesPago?.efectivo ?? monto / 2;
-        const digParte = v.ventaCompleta?.detallesPago?.digital ?? monto / 2;
-        totalEfectivo += Number(efecParte);
-        totalYape += Number(digParte);
+        const desglose = v.ventaCompleta?.detallesPago
+          ? {
+              efectivo: Number(v.ventaCompleta.detallesPago.efectivo || 0),
+              digital: Number(v.ventaCompleta.detallesPago.digital || 0),
+              canalDigital: v.ventaCompleta.detallesPago.canalDigital || 'YAPE',
+            }
+          : parseDesglosePagoCruzado(v.notas, monto);
+        totalEfectivo += desglose.efectivo;
+        if (desglose.canalDigital === 'TARJETA' || desglose.canalDigital === 'TRANSFERENCIA') {
+          totalTransferencia += desglose.digital;
+        } else {
+          totalYape += desglose.digital;
+        }
       } else {
         totalTransferencia += monto;
       }
     });
 
+    // 2. Cuotas de academia
     (cuotas || []).forEach((c: any) => {
       if (sedeId && sedeId !== 'TODAS' && !matchSede(c.matriculas?.sede, sedeId)) return;
+      if (!matchPeriodo(c.fecha_pago)) return;
+
       const monto = Number(c.monto || 0);
       const metodo = String(c.metodo_pago || '').toUpperCase();
-      if (metodo.includes('EFECTIVO')) totalEfectivo += monto;
-      else if (metodo.includes('YAPE') || metodo.includes('PLIN')) totalYape += monto;
-      else totalTransferencia += monto;
+      if (metodo.includes('MIXTO')) {
+        const desglose = parseDesglosePagoCruzado(c.notas, monto);
+        totalEfectivo += desglose.efectivo;
+        if (desglose.canalDigital === 'TARJETA' || desglose.canalDigital === 'TRANSFERENCIA') {
+          totalTransferencia += desglose.digital;
+        } else {
+          totalYape += desglose.digital;
+        }
+      } else if (metodo.includes('EFECTIVO')) {
+        totalEfectivo += monto;
+      } else if (metodo.includes('YAPE') || metodo.includes('PLIN')) {
+        totalYape += monto;
+      } else {
+        totalTransferencia += monto;
+      }
+    });
+
+    // 3. Matrículas de academia
+    (matriculas || []).forEach((m: any) => {
+      if (sedeId && sedeId !== 'TODAS' && !matchSede(m.sede, sedeId)) return;
+      if (!matchPeriodo(m.creado_en || m.fecha_matricula)) return;
+
+      const monto = Number(m.monto_matricula_pagado || 0);
+      if (monto <= 0) return;
+
+      const metodo = String(m.metodo_pago || 'EFECTIVO').toUpperCase();
+      if (metodo.includes('MIXTO')) {
+        const desglose = parseDesglosePagoCruzado(m.notas, monto);
+        totalEfectivo += desglose.efectivo;
+        if (desglose.canalDigital === 'TARJETA' || desglose.canalDigital === 'TRANSFERENCIA') {
+          totalTransferencia += desglose.digital;
+        } else {
+          totalYape += desglose.digital;
+        }
+      } else if (metodo.includes('EFECTIVO')) {
+        totalEfectivo += monto;
+      } else if (metodo.includes('YAPE') || metodo.includes('PLIN')) {
+        totalYape += monto;
+      } else {
+        totalTransferencia += monto;
+      }
     });
 
     const granTotal = totalYape + totalEfectivo + totalTransferencia;
