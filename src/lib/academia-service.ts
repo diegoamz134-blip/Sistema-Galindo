@@ -223,15 +223,21 @@ export async function getMatriculasConDetalle(
 
     // D. Unificar datos completos
     const resultado: MatriculaConDetalle[] = matriculasData.map((m) => {
-      const alumno = alumnosMap[m.alumno_id] || {
-        id: m.alumno_id || `temp-${m.id}`,
-        dni: '00000000',
-        nombres: 'Estudiante',
-        apellidos: 'Galindo',
-        celular: '999999999',
-        distrito: 'Ica',
-        creado_en: m.creado_en,
-      };
+      const alumno = alumnosMap[m.alumno_id] || (() => {
+        // Si llegamos aquí, la matrícula no tiene alumno_id válido en la BD.
+        // Esto NO debería ocurrir en registros nuevos (bug corregido en alumno_id del payload).
+        // Los registros anteriores al fix pueden mostrar esto temporalmente.
+        console.warn(`[Academia] Matrícula ${m.codigo_matricula || m.id} sin alumno vinculado (alumno_id=${m.alumno_id}). Ejecuta el script SQL de reparación.`);
+        return {
+          id: m.alumno_id || `temp-${m.id}`,
+          dni: '---',
+          nombres: '⚠ Sin',
+          apellidos: 'Datos',
+          celular: '---',
+          distrito: 'Ica',
+          creado_en: m.creado_en,
+        };
+      })();
 
       const cuotas = cuotasMap[m.id] || [];
 
@@ -504,6 +510,7 @@ export async function crearMatriculaCompleta(
     const notasFinales = `${notasLimpias}${notasLimpias ? ' • ' : ''}${tagMetodo}${tagOp}`.trim();
 
     const basePayload: Record<string, any> = {
+      alumno_id: alumnoId, // ← CAMPO CRÍTICO: vincula la matrícula con el alumno
       codigo_matricula: codigoMatricula,
       curso_id: input.curso_id,
       curso_nombre: input.curso_nombre,
